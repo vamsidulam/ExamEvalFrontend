@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import aboutImg from '../components/assets/Aboutus.png';
 import logo from '../components/assets/logo.png';
+import heroBg from '../components/assets/HeroBG1.png';
 
 const HomePage = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -204,7 +205,7 @@ const HomePage = () => {
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{
-            backgroundImage: `url('/src/components/assets/HeroBG1.png')`
+            backgroundImage: `url(${heroBg})`
           }}
         />
         {/* Overlay for better text readability */}
