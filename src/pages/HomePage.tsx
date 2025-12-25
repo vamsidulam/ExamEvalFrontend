@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import aboutImg from '../components/assets/Aboutus.png';
 import logo from '../components/assets/logo.png';
-import heroBg from '../components/assets/HeroBG1.png';
 
 const HomePage = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -201,15 +200,42 @@ const HomePage = () => {
 
       {/* Hero Section - Two Column Layout */}
       <section id="hero-section" className="relative min-h-screen overflow-hidden">
-        {/* Background Image - HeroBG1.png */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: `url(${heroBg})`
-          }}
-        />
-        {/* Overlay for better text readability */}
-        <div className="absolute inset-0 bg-black/40"></div>
+        {/* Beautiful Styled Background - Multi-layer Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+          {/* Animated mesh gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/30 via-blue-500/20 to-purple-500/30 animate-pulse"></div>
+          
+          {/* Floating gradient orbs */}
+          <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-r from-cyan-400/40 to-blue-500/40 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute top-40 right-20 w-96 h-96 bg-gradient-to-r from-purple-400/40 to-pink-500/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute bottom-20 left-1/3 w-80 h-80 bg-gradient-to-r from-blue-400/40 to-indigo-500/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+          
+          {/* Grid pattern overlay */}
+          <div className="absolute inset-0 opacity-20" style={{
+            backgroundImage: `
+              linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+            `,
+            backgroundSize: '50px 50px'
+          }}></div>
+          
+          {/* Diagonal stripes pattern */}
+          <div className="absolute inset-0 opacity-10" style={{
+            backgroundImage: `repeating-linear-gradient(
+              45deg,
+              transparent,
+              transparent 10px,
+              rgba(255,255,255,0.05) 10px,
+              rgba(255,255,255,0.05) 20px
+            )`
+          }}></div>
+          
+          {/* Shimmer effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" style={{
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 3s infinite'
+          }}></div>
+        </div>
         
         <div className="relative z-10 w-full px-2 sm:px-3 lg:px-4 pt-20">
           {/* Two Column Layout */}
@@ -973,6 +999,11 @@ const HomePage = () => {
         @keyframes orbit4 {
           0% { transform: rotate(270deg) translateX(60px) rotate(-270deg); }
           100% { transform: rotate(630deg) translateX(60px) rotate(-630deg); }
+        }
+        
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
         }
         
         .animate-orbit-1 { animation: orbit1 8s linear infinite; }
