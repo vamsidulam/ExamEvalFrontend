@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { templateService } from '../services/templateService';
 import { questionPaperService, QuestionPaperCreate, GenerationResult } from '../services/questionPaperService';
+import { getApiUrl } from '../config/api';
 import {
   RefreshCw,
   Sparkles,
@@ -200,9 +201,8 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
       
       // Authentication removed
 
-      // Use the correct backend URL for Vite
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/generate-questions`, {
+      // Use the centralized API config
+      const response = await fetch(getApiUrl('/api/generate-questions'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -223,7 +223,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
       setGenerationResult(result);
       
       // Fetch complete template details to ensure we have all information
-      const templateResponse = await fetch(`${backendUrl}/api/templates/${selectedTemplate.id}`, {
+      const templateResponse = await fetch(getApiUrl(`/api/templates/${selectedTemplate.id}`), {
         method: 'GET',
         headers: {}
       });
@@ -303,10 +303,8 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
     try {
       // Authentication removed
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-
       // Save structured questions to the database
-      const response = await fetch(`${backendUrl}/api/generated-papers/${previewQuestionPaper.id}/questions`, {
+      const response = await fetch(getApiUrl(`/api/generated-papers/${previewQuestionPaper.id}/questions`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -830,10 +828,9 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                         onClick={async () => {
                           try {
                             // Authentication removed
-                            const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
                             
                             // Fetch complete template details for preview
-                            const templateResponse = await fetch(`${backendUrl}/api/templates/${selectedTemplate.id}`, {
+                            const templateResponse = await fetch(getApiUrl(`/api/templates/${selectedTemplate.id}`), {
                               method: 'GET',
                               headers: {}
                             });

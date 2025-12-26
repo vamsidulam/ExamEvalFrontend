@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { User, Mail, Book, Calendar, MapPin, Edit } from 'lucide-react'
+import { getApiUrl } from '../../config/api'
 
 interface StudentProfile {
   student_id: string
@@ -23,7 +24,7 @@ export default function StudentProfile() {
   const fetchProfile = async () => {
     try {
       const token = localStorage.getItem('studentToken')
-      const response = await fetch('http://localhost:8000/student-profile', {
+      const response = await fetch(getApiUrl('/student-profile'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

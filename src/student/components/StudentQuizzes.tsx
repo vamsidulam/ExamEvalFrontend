@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Clock, BookOpen, CheckCircle, XCircle } from 'lucide-react'
+import { getApiUrl } from '../../config/api'
 
 interface Quiz {
   id: string
@@ -30,7 +31,7 @@ export default function StudentQuizzes() {
   const fetchQuizzes = async () => {
     try {
       const token = localStorage.getItem('studentToken')
-      const response = await fetch('http://localhost:8000/student-quizzes', {
+      const response = await fetch(getApiUrl('/student-quizzes'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

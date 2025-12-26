@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getApiUrl } from '../../config/api'
 import { 
   Book, 
   ClipboardList, 
@@ -61,7 +62,7 @@ export default function StudentDashboard() {
   const fetchStudentStats = async () => {
     try {
       const token = localStorage.getItem('studentToken')
-      const response = await fetch('http://localhost:8000/student-results', {
+      const response = await fetch(getApiUrl('/student-results'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

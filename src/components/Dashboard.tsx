@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser, useClerk } from '@clerk/clerk-react';
+import { getApiUrl } from '../config/api';
 import { 
   BarChart3, 
   FileText, 
@@ -42,7 +43,7 @@ export default function Dashboard() {
   const fetchDashboardStats = async () => {
     try {
       const token = localStorage.getItem('clerk-token');
-      const response = await fetch('http://localhost:8000/user-stats', {
+      const response = await fetch(getApiUrl('/user-stats'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

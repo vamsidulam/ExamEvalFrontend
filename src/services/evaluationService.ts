@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { KeySheet, KeyMetadata, StudentScript, EvaluationResult } from '../lib/supabase';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../config/api';
 
 export class EvaluationService {
   // Step 1a: Upload key sheet file only (no metadata yet)

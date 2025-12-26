@@ -3,6 +3,7 @@ import { templateService } from '../services/templateService';
 import { questionPaperService } from '../services/questionPaperService';
 import QuestionPaper from './QuestionPaper';
 import QuestionPaperPreview from '../components/QuestionPaperPreview';
+import { getApiUrl } from '../config/api';
 import {
   FileText,
   Edit3,
@@ -102,13 +103,11 @@ const QuestionGeneration = () => {
     try {
       setLoading(true);
       // Authentication removed
-
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       
       // Load both existing question papers and generated papers
       const [questionPapersResponse, generatedPapersResponse] = await Promise.all([
         questionPaperService.getQuestionPapers().catch(() => ({ question_papers: [] })),
-        fetch(`${backendUrl}/api/generated-papers`, {
+        fetch(getApiUrl('/api/generated-papers'), {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${token}` }
         }).then(res => res.ok ? res.json() : []).catch(() => [])
@@ -492,11 +491,9 @@ const QuestionGeneration = () => {
       setError(null);
       
       // Authentication removed
-
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       
       // Use the new structured generation endpoint
-      const response = await fetch(`${backendUrl}/api/generate-questions`, {
+      const response = await fetch(getApiUrl('/api/generate-questions'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -541,11 +538,10 @@ const QuestionGeneration = () => {
       // Authentication removed
 
       let fullDetails;
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       
       if (paper.type === 'generated') {
         // For generated papers, fetch from generated-papers endpoint
-        const response = await fetch(`${backendUrl}/api/generated-papers/${paper.id}`, {
+        const response = await fetch(getApiUrl(`/api/generated-papers/${paper.id}`), {
           method: 'GET',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -560,7 +556,7 @@ const QuestionGeneration = () => {
         // Fetch complete template details to ensure we have all information
         if (fullDetails.template_id) {
           try {
-            const templateResponse = await fetch(`${backendUrl}/api/templates/${fullDetails.template_id}`, {
+            const templateResponse = await fetch(getApiUrl(`/api/templates/${fullDetails.template_id}`), {
               method: 'GET',
               headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -672,11 +668,9 @@ const QuestionGeneration = () => {
       setLoading(true);
       // Authentication removed
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-
       if (previewQuestionPaper.type === 'generated') {
         // For generated papers, use the new update endpoint
-        const response = await fetch(`${backendUrl}/api/generated-papers/${previewQuestionPaper.id}/questions`, {
+        const response = await fetch(getApiUrl(`/api/generated-papers/${previewQuestionPaper.id}/questions`), {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -788,12 +782,10 @@ const QuestionGeneration = () => {
       setError(null);
       
       // Authentication removed
-
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       
       if (paperType === 'generated') {
         // Delete generated paper
-        const response = await fetch(`${backendUrl}/api/generated-papers/${paperId}`, {
+        const response = await fetch(getApiUrl(`/api/generated-papers/${paperId}`), {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });

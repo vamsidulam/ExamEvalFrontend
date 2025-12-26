@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../config/api';
 import { 
   Users, 
   UserPlus, 
@@ -75,7 +76,7 @@ export default function ClassManagement() {
       console.log('Fetching timetable data...'); // Debug log
       
       // Fetch timetables
-      const timetablesResponse = await fetch('http://localhost:8000/api/timetables', {
+      const timetablesResponse = await fetch(getApiUrl('/api/timetables'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
         }
@@ -96,7 +97,7 @@ export default function ClassManagement() {
       }
       
       // Fetch available classes
-      const classesResponse = await fetch('http://localhost:8000/api/timetables/classes', {
+      const classesResponse = await fetch(getApiUrl('/api/timetables/classes'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
         }
@@ -119,7 +120,7 @@ export default function ClassManagement() {
       console.log('Fetching class data...'); // Debug log
       
       // Fetch students from backend
-      const studentsResponse = await fetch('http://localhost:8000/api/students', {
+      const studentsResponse = await fetch(getApiUrl('/api/students'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
         }
@@ -134,7 +135,7 @@ export default function ClassManagement() {
       }
       
       // Fetch stats from backend
-      const statsResponse = await fetch('http://localhost:8000/api/students/stats', {
+      const statsResponse = await fetch(getApiUrl('/api/students/stats'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
         }
@@ -210,7 +211,7 @@ export default function ClassManagement() {
         const formData = new FormData();
         formData.append('file', file);
         
-        const response = await fetch('http://localhost:8000/api/students/upload-csv', {
+        const response = await fetch(getApiUrl('/api/students/upload-csv'), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
@@ -325,7 +326,7 @@ export default function ClassManagement() {
       formData.append('file', file);
       formData.append('class_name', className);
       
-      const response = await fetch('http://localhost:8000/api/timetables/upload', {
+      const response = await fetch(getApiUrl('/api/timetables/upload'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
@@ -355,7 +356,7 @@ export default function ClassManagement() {
     }
     
     try {
-      const response = await fetch(`http://localhost:8000/api/timetables/${timetableId}`, {
+      const response = await fetch(getApiUrl(`/api/timetables/${timetableId}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
@@ -381,7 +382,7 @@ export default function ClassManagement() {
       const formData = new FormData();
       formData.append('class_name', newClassName);
       
-      const response = await fetch(`http://localhost:8000/api/timetables/${timetableId}`, {
+      const response = await fetch(getApiUrl(`/api/timetables/${timetableId}`), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000';
+import { API_BASE_URL, getApiUrl } from '../config/api';
 
 export interface BTLLevel {
   btl_level_name: string;
@@ -164,11 +164,9 @@ class QuestionPaperService {
 
   // Add method to get question paper details with automatic routing
   async getQuestionPaperDetailsWithRouting(paperId: string, paperType: string) {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-    
     if (paperType === 'generated') {
       // Use generated papers endpoint
-      const response = await fetch(`${backendUrl}/api/generated-papers/${paperId}`, {
+      const response = await fetch(getApiUrl(`/api/generated-papers/${paperId}`), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'

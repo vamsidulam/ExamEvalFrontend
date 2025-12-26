@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Book } from 'lucide-react'
+import { getApiUrl } from '../../config/api'
 
 export default function StudentLogin() {
   const [studentId, setStudentId] = useState('')
@@ -19,7 +20,7 @@ export default function StudentLogin() {
       formData.append('student_id', studentId)
       formData.append('password', password)
 
-      const response = await fetch('http://localhost:8000/student-login', {
+      const response = await fetch(getApiUrl('/student-login'), {
         method: 'POST',
         body: formData,
       })

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload, UserPlus } from 'lucide-react';
+import { getApiUrl } from '../config/api';
 
 interface AddStudentModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export default function AddStudentModal({ isOpen, onClose, onAddStudent }: AddSt
     try {
       console.log('Submitting student data:', formData);
       
-      const response = await fetch('http://localhost:8000/api/students', {
+      const response = await fetch(getApiUrl('/api/students'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -85,7 +86,7 @@ export default function AddStudentModal({ isOpen, onClose, onAddStudent }: AddSt
       const formData = new FormData();
       formData.append('file', selectedFile);
       
-      const response = await fetch('http://localhost:8000/api/students/upload-csv', {
+      const response = await fetch(getApiUrl('/api/students/upload-csv'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,

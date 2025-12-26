@@ -1,7 +1,7 @@
 // templateService.ts
 // Service for managing question paper templates
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../config/api';
 
 export interface TemplateSection {
   sectionName: string;

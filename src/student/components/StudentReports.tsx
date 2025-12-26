@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BarChart3, TrendingUp, Award, FileText, Eye } from 'lucide-react'
+import { getApiUrl } from '../../config/api'
 
 interface ExamResult {
   id: string
@@ -48,7 +49,7 @@ export default function StudentReports() {
   const fetchResults = async () => {
     try {
       const token = localStorage.getItem('studentToken')
-      const response = await fetch('http://localhost:8000/student-results', {
+      const response = await fetch(getApiUrl('/student-results'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

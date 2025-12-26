@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useUser, SignIn } from '@clerk/clerk-react';
 import { BookOpen } from 'lucide-react';
+import { getApiUrl } from '../config/api';
 
 export default function LoginPage() {
   const { isSignedIn, isLoaded } = useUser();
@@ -29,9 +30,9 @@ export default function LoginPage() {
       formData.append('student_id', studentId);
       formData.append('password', password);
 
-      console.log('Making request to: http://localhost:8000/student-login');
+      console.log('Making request to:', getApiUrl('/student-login'));
       
-      const response = await fetch('http://localhost:8000/student-login', {
+      const response = await fetch(getApiUrl('/student-login'), {
         method: 'POST',
         body: formData,
       });
