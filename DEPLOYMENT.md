@@ -26,8 +26,19 @@ Add the following environment variable in Vercel dashboard:
 **Required:**
 - `VITE_BACKEND_URL`: Your backend API URL (e.g., `https://your-backend.onrender.com`)
 
+**How to add:**
+1. Go to your Vercel project dashboard
+2. Click on **Settings** → **Environment Variables**
+3. Click **Add New**
+4. Name: `VITE_BACKEND_URL`
+5. Value: Your backend URL (e.g., `https://your-backend.onrender.com`)
+6. Select environments: Production, Preview, Development (or as needed)
+7. Click **Save**
+
 **Optional:**
 - Add any other `VITE_*` prefixed environment variables your app needs
+
+**Note:** Do NOT use `@secret-name` syntax in `vercel.json` unless you've created the secret in Vercel dashboard first. Instead, set environment variables directly in the Vercel dashboard.
 
 ### 4. Deploy
 - Click "Deploy"
