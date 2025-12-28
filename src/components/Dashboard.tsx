@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useUser, useClerk } from '@clerk/clerk-react';
-import { getApiUrl } from '../config/api';
 import { 
   BarChart3, 
   FileText, 
@@ -42,17 +41,18 @@ export default function Dashboard() {
 
   const fetchDashboardStats = async () => {
     try {
-      const token = localStorage.getItem('clerk-token');
-      const response = await fetch(getApiUrl('/user-stats'), {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
+      // Mock: Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Mock stats data
+      const mockStats: DashboardStats = {
+        totalEvaluations: 45,
+        totalPapersGraded: 120,
+        totalStudentsEvaluated: 85,
+        lastEvaluation: '2 hours ago'
+      };
+      
+      setStats(mockStats);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
     } finally {

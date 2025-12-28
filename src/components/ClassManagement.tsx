@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getApiUrl } from '../config/api';
 import { 
   Users, 
   UserPlus, 
@@ -73,41 +72,30 @@ export default function ClassManagement() {
 
   const fetchTimetableData = async () => {
     try {
-      console.log('Fetching timetable data...'); // Debug log
+      // Mock: Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Fetch timetables
-      const timetablesResponse = await fetch(getApiUrl('/api/timetables'), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
+      console.log('Mock: Fetching timetable data...');
+      
+      // Mock timetables data
+      const mockTimetables: Timetable[] = [
+        {
+          id: 1,
+          timetable_id: 'tt_1',
+          class_name: 'Class 10A',
+          filename: 'timetable_10a.pdf',
+          file_url: '',
+          file_type: 'pdf',
+          file_size: 102400,
+          uploaded_by: 'admin',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          status: 'active'
         }
-      });
+      ];
       
-      if (timetablesResponse.ok) {
-        const timetablesData = await timetablesResponse.json();
-        console.log('Timetables data received:', timetablesData); // Debug log
-        
-        // Debug: Log each timetable URL
-        timetablesData.timetables?.forEach((timetable: Timetable) => {
-          console.log(`Timetable ${timetable.class_name}: ${timetable.file_url}`);
-        });
-        
-        setTimetables(timetablesData.timetables || []);
-      } else {
-        console.error('Failed to fetch timetables:', timetablesResponse.status);
-      }
-      
-      // Fetch available classes
-      const classesResponse = await fetch(getApiUrl('/api/timetables/classes'), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        }
-      });
-      
-      if (classesResponse.ok) {
-        const classesData = await classesResponse.json();
-        console.log('Classes data received:', classesData); // Debug log
-        setAvailableClasses(classesData.classes || []);
-      }
+      setTimetables(mockTimetables);
+      setAvailableClasses(['Class 10A', 'Class 10B', 'Class 11A']);
       
     } catch (error) {
       console.error('Error fetching timetable data:', error);
@@ -117,54 +105,13 @@ export default function ClassManagement() {
   const fetchClassData = async () => {
     try {
       setLoading(true);
-      console.log('Fetching class data...'); // Debug log
+      // Mock: Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Fetch students from backend
-      const studentsResponse = await fetch(getApiUrl('/api/students'), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        }
-      });
+      console.log('Mock: Fetching class data...');
       
-      if (studentsResponse.ok) {
-        const studentsData = await studentsResponse.json();
-        console.log('Students data received:', studentsData); // Debug log
-        setStudents(studentsData.students || []);
-      } else {
-        console.error('Failed to fetch students:', studentsResponse.status); // Debug log
-      }
-      
-      // Fetch stats from backend
-      const statsResponse = await fetch(getApiUrl('/api/students/stats'), {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        }
-      });
-      
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        console.log('Stats data received:', statsData); // Debug log
-        setStats({
-          totalStudents: statsData.total_students || 0,
-          attendancePercentage: 92, // Keep mock data for now
-          latestMarksPosted: 'Mathematics - Unit Test 1', // Keep mock data for now
-          activeClasses: statsData.active_classes || 0
-        });
-      } else {
-        console.error('Failed to fetch stats:', statsResponse.status); // Debug log
-      }
-      
-    } catch (error) {
-      console.error('Error fetching class data:', error);
-      // Fallback to mock data
-      setStats({
-        totalStudents: 150,
-        attendancePercentage: 92,
-        latestMarksPosted: 'Mathematics - Unit Test 1',
-        activeClasses: 5
-      });
-
-      setStudents([
+      // Mock students data
+      const mockStudents: Student[] = [
         {
           id: '1',
           student_id: 'STU001',
@@ -183,7 +130,18 @@ export default function ClassManagement() {
           branch: 'Electronics',
           status: 'active'
         }
-      ]);
+      ];
+      
+      setStudents(mockStudents);
+      setStats({
+        totalStudents: mockStudents.length,
+        attendancePercentage: 92,
+        latestMarksPosted: 'Mathematics - Unit Test 1',
+        activeClasses: 5
+      });
+      
+    } catch (error) {
+      console.error('Error fetching class data:', error);
     } finally {
       setLoading(false);
     }
@@ -202,46 +160,32 @@ export default function ClassManagement() {
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    console.log('CSV file selected:', file); // Debug log
+    console.log('Mock: CSV file selected:', file);
     
     if (file) {
       try {
-        console.log('Starting CSV upload...'); // Debug log
+        // Mock: Simulate CSV upload delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const formData = new FormData();
-        formData.append('file', file);
+        console.log('Mock: CSV upload completed');
         
-        const response = await fetch(getApiUrl('/api/students/upload-csv'), {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-          },
-          body: formData
-        });
+        const mockResult = {
+          successful_inserts: 5,
+          failed_inserts: 0,
+          total_rows: 5
+        };
         
-        console.log('CSV Upload Response status:', response.status);
-        const result = await response.json();
-        console.log('CSV Upload Response data:', result);
+        const resultMessage = `CSV upload completed! (Mock mode)\n` +
+          `✅ ${mockResult.successful_inserts} students added successfully\n` +
+          `❌ ${mockResult.failed_inserts} students failed\n` +
+          `📊 Total rows processed: ${mockResult.total_rows}`;
         
-        if (response.ok) {
-          const resultMessage = `CSV upload completed!\n` +
-            `✅ ${result.successful_inserts} students added successfully\n` +
-            `❌ ${result.failed_inserts} students failed\n` +
-            `📊 Total rows processed: ${result.total_rows}`;
-          
-          alert(resultMessage);
-          console.log('CSV upload completed, refreshing data...'); // Debug log
-          await fetchClassData(); // Refresh the student list
-          console.log('Data refresh after CSV completed'); // Debug log
-        } else {
-          alert(`Error: ${result.detail || 'Upload failed'}`);
-        }
+        alert(resultMessage);
+        await fetchClassData(); // Refresh the student list
       } catch (error) {
         console.error('CSV upload error:', error);
         alert('Failed to upload CSV file');
       }
-    } else {
-      console.log('No file selected'); // Debug log
     }
   };
 
@@ -320,30 +264,28 @@ export default function ClassManagement() {
 
   const handleTimetableUpload = async (file: File, className: string) => {
     try {
-      console.log('Uploading timetable:', file.name, 'for class:', className);
+      // Mock: Simulate upload delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('class_name', className);
+      console.log('Mock: Uploading timetable:', file.name, 'for class:', className);
       
-      const response = await fetch(getApiUrl('/api/timetables/upload'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        },
-        body: formData
-      });
+      // Mock: Add to timetables
+      const newTimetable: Timetable = {
+        id: timetables.length + 1,
+        timetable_id: `tt_${Date.now()}`,
+        class_name: className,
+        filename: file.name,
+        file_url: '',
+        file_type: file.type.startsWith('image/') ? 'image' : 'pdf',
+        file_size: file.size,
+        uploaded_by: 'admin',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: 'active'
+      };
       
-      console.log('Timetable upload response status:', response.status);
-      const result = await response.json();
-      console.log('Timetable upload response data:', result);
-      
-      if (response.ok) {
-        alert(`Timetable uploaded successfully for ${className}!`);
-        await fetchTimetableData(); // Refresh timetable data
-      } else {
-        alert(`Error: ${result.detail || 'Upload failed'}`);
-      }
+      setTimetables([...timetables, newTimetable]);
+      alert(`Timetable uploaded successfully for ${className}! (Mock mode)`);
     } catch (error) {
       console.error('Timetable upload error:', error);
       alert('Failed to upload timetable');
@@ -356,21 +298,11 @@ export default function ClassManagement() {
     }
     
     try {
-      const response = await fetch(getApiUrl(`/api/timetables/${timetableId}`), {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        }
-      });
+      // Mock: Simulate delete delay
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      const result = await response.json();
-      
-      if (response.ok) {
-        alert('Timetable deleted successfully!');
-        await fetchTimetableData(); // Refresh timetable data
-      } else {
-        alert(`Error: ${result.detail || 'Delete failed'}`);
-      }
+      setTimetables(timetables.filter(t => t.timetable_id !== timetableId));
+      alert('Timetable deleted successfully! (Mock mode)');
     } catch (error) {
       console.error('Timetable delete error:', error);
       alert('Failed to delete timetable');
@@ -379,25 +311,17 @@ export default function ClassManagement() {
 
   const handleUpdateTimetable = async (timetableId: string, newClassName: string) => {
     try {
-      const formData = new FormData();
-      formData.append('class_name', newClassName);
+      // Mock: Simulate update delay
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      const response = await fetch(getApiUrl(`/api/timetables/${timetableId}`), {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        },
-        body: formData
-      });
+      // Mock: Update timetable
+      setTimetables(timetables.map(t => 
+        t.timetable_id === timetableId 
+          ? { ...t, class_name: newClassName, updated_at: new Date().toISOString() }
+          : t
+      ));
       
-      const result = await response.json();
-      
-      if (response.ok) {
-        alert('Timetable updated successfully!');
-        await fetchTimetableData(); // Refresh timetable data
-      } else {
-        alert(`Error: ${result.detail || 'Update failed'}`);
-      }
+      alert('Timetable updated successfully! (Mock mode)');
     } catch (error) {
       console.error('Timetable update error:', error);
       alert('Failed to update timetable');

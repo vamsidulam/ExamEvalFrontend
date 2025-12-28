@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { X, Upload, UserPlus } from 'lucide-react';
-import { getApiUrl } from '../config/api';
 
 interface AddStudentModalProps {
   isOpen: boolean;
@@ -23,36 +22,30 @@ export default function AddStudentModal({ isOpen, onClose, onAddStudent }: AddSt
     e.preventDefault();
     
     try {
-      console.log('Submitting student data:', formData);
+      // Mock: Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      const response = await fetch(getApiUrl('/api/students'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        },
-        body: JSON.stringify(formData)
+      console.log('Mock: Submitting student data:', formData);
+      
+      // Mock student object
+      const mockStudent = {
+        id: `student_${Date.now()}`,
+        ...formData,
+        password: formData.student_id, // Mock: password same as ID
+        created_at: new Date().toISOString(),
+        status: 'active' as const
+      };
+      
+      onAddStudent(mockStudent);
+      setFormData({
+        student_id: '',
+        name: '',
+        email: '',
+        phone_no: '',
+        branch: ''
       });
-      
-      console.log('Response status:', response.status);
-      const result = await response.json();
-      console.log('Response data:', result);
-      
-      if (response.ok) {
-        onAddStudent(result.student);
-        setFormData({
-          student_id: '',
-          name: '',
-          email: '',
-          phone_no: '',
-          branch: ''
-        });
-        onClose();
-        alert('Student added successfully!');
-      } else {
-        console.error('Error response:', result);
-        alert(`Error: ${result.detail || 'Failed to add student'}`);
-      }
+      onClose();
+      alert('Student added successfully! (Mock mode)');
     } catch (error) {
       console.error('Error adding student:', error);
       alert('Failed to add student: ' + error);
@@ -81,49 +74,27 @@ export default function AddStudentModal({ isOpen, onClose, onAddStudent }: AddSt
     }
 
     try {
-      console.log('Starting CSV upload...', selectedFile.name);
+      // Mock: Simulate CSV upload delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const formData = new FormData();
-      formData.append('file', selectedFile);
+      console.log('Mock: CSV upload', selectedFile.name);
       
-      const response = await fetch(getApiUrl('/api/students/upload-csv'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || 'dummy-token'}`,
-        },
-        body: formData
-      });
+      // Mock: Simulate reading CSV (in real app, would parse CSV)
+      const mockResult = {
+        successful_inserts: 5,
+        failed_inserts: 0,
+        total_rows: 5,
+        failed_records: [] as any[]
+      };
       
-      console.log('CSV Upload Response status:', response.status);
-      const result = await response.json();
-      console.log('CSV Upload Response data:', result);
+      alert(`CSV upload completed! (Mock mode)\n` +
+        `✅ ${mockResult.successful_inserts} students added successfully\n` +
+        `❌ ${mockResult.failed_inserts} students failed\n` +
+        `📊 Total rows processed: ${mockResult.total_rows}`);
       
-      if (response.ok) {
-        console.log('Failed records:', result.failed_records); // Debug failed records
-        
-        let resultMessage = `CSV upload completed!\n` +
-          `✅ ${result.successful_inserts} students added successfully\n` +
-          `❌ ${result.failed_inserts} students failed\n` +
-          `📊 Total rows processed: ${result.total_rows}`;
-        
-        // Show details of failed records if any
-        if (result.failed_records && result.failed_records.length > 0) {
-          resultMessage += '\n\nFailed records:\n';
-          result.failed_records.forEach((record: any) => {
-            resultMessage += `Row ${record.row}: ${record.error}\n`;
-            if (record.data) {
-              resultMessage += `  Data: ${JSON.stringify(record.data)}\n`;
-            }
-          });
-        }
-        
-        alert(resultMessage);
-        onAddStudent({}); // Trigger parent to refresh data - pass empty object instead of null
-        setSelectedFile(null);
-        onClose();
-      } else {
-        alert(`Error: ${result.detail || 'Upload failed'}`);
-      }
+      onAddStudent({}); // Trigger parent to refresh data
+      setSelectedFile(null);
+      onClose();
     } catch (error) {
       console.error('CSV upload error:', error);
       alert('Failed to upload CSV file');

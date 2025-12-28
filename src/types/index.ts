@@ -1,15 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+/**
+ * TypeScript types for the application
+ * These types are used throughout the frontend
+ */
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Database types
 export interface KeySheet {
   id: string;
   filename: string;
@@ -55,3 +48,4 @@ export interface EvaluationSummary {
   evaluation_result: EvaluationResult;
   key_metadata: KeyMetadata;
 }
+

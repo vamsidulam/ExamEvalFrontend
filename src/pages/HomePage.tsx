@@ -187,7 +187,7 @@ const HomePage = () => {
             {/* Right-aligned CTAs */}
             <div className="flex items-center space-x-4">
               <Link
-                to="/dashboard"
+                to="/login"
                 className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-blue-500/25"
               >
                 <span>Get Started</span>
@@ -266,7 +266,7 @@ const HomePage = () => {
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                to="/dashboard"
+                to="/login"
                   className="group relative bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold flex items-center justify-center space-x-2 shadow-2xl hover:shadow-blue-500/25 transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 active:scale-95"
                 style={{
                   boxShadow: '0 10px 25px rgba(59, 130, 246, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
@@ -715,7 +715,7 @@ const HomePage = () => {
               {/* CTA Button */}
               <div className="mt-8">
                 <Link
-                  to="/dashboard"
+                  to="/login"
                   className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <span>Start Your Journey</span>

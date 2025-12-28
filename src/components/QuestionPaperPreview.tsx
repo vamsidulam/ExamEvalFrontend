@@ -82,7 +82,7 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
         <div key={question.id || index} className="border border-gray-200 rounded-lg p-4 mb-4">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Question {question.question_number || index + 1} ({question.marks} marks)
+              Question {question.question_number ?? (index + 1)} ({question.marks} marks)
             </label>
             <textarea
               value={question.question_text || ''}
@@ -142,16 +142,20 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
       <div key={question.id || index} className="mb-6">
         <div className="flex items-start">
           <span className="mr-4 font-medium text-gray-900 flex-shrink-0">
-            {question.question_number || index + 1})
+            {question.question_number ?? (index + 1)})
           </span>
           <div className="flex-1">
-            <p className="text-gray-900 mb-2">{question.question_text}</p>
+            <p className="text-gray-900 mb-2">
+              {String(question.question_text || '').replace(/^\d+[\)\.]\s*/, '').trim()}
+            </p>
             
             {/* Enhanced MCQ rendering with better type checking and option display */}
+            {/* Only show options if show_options is true (or undefined for backward compatibility) */}
             {(question.question_type?.toLowerCase().includes('mcq') || 
               question.question_type?.toLowerCase().includes('multiple') ||
               question.question_type?.toLowerCase() === 'multiple choice') && 
-             question.options && Array.isArray(question.options) && question.options.length > 0 && (
+             question.options && Array.isArray(question.options) && question.options.length > 0 &&
+             (question.show_options !== false) && ( // Show options only if show_options is not explicitly false
               <div className="ml-4 space-y-1 text-sm text-gray-700">
                 {question.options.map((option: string, optionIndex: number) => {
                   // Extract the option letter from the option text (e.g., "A) Text" -> "A")
@@ -246,8 +250,13 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
   };
 
   const handleDownload = () => {
-    // Create PDF instead of text file
-    generatePDF('save');
+    // Create PDF and download
+    try {
+      generatePDF('save');
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert('Failed to download PDF. Please try again.');
+    }
   };
 
   const generatePDF = async (mode: 'save' | 'print' = 'save') => {
@@ -328,27 +337,34 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
       );
       yPosition += 2;
       
-      // Internal Examination (Center)
-      yPosition = addCenteredText(
-        'Internal Examination',
-        yPosition, 12, 'normal'
-      );
-      yPosition += 2;
-      
-      // Course Code (Center)
-      const courseInfo = template?.course_code || 'CN2 (CN002)';
-      yPosition = addCenteredText(
-        courseInfo,
-        yPosition, 12, 'normal'
-      );
-      yPosition += 6;
+      // Removed "Internal Examination" line
+      // yPosition = addCenteredText(
+      //   'Internal Examination',
+      //   yPosition, 12, 'normal'
+      // );
+      // yPosition += 6;
       
       // Time and Max Marks (Left and Right aligned)
-      const duration = template?.duration_minutes || questionPaper.duration?.replace(' Minutes', '') || '0';
+      const duration = parseInt(template?.duration_minutes || questionPaper.duration?.replace(' Minutes', '') || '0');
       const totalMarks = calculateTotalMarks();
+      
+      // Format time properly
+      let timeText = '';
+      if (duration >= 60) {
+        const hours = Math.floor(duration / 60);
+        const minutes = duration % 60;
+        if (minutes > 0) {
+          timeText = `Time: ${hours} hr ${minutes} min`;
+        } else {
+          timeText = `Time: ${hours} hr${hours > 1 ? 's' : ''}`;
+        }
+      } else {
+        timeText = `Time: ${duration} min`;
+      }
+      
       yPosition = addAlignedText(
-        `Time:${duration === '120' ? '2hrs' : Math.floor(parseInt(duration)/60) + 'hrs'}`,
-        `Max.Marks:${totalMarks}m`,
+        timeText,
+        `Max.Marks: ${totalMarks}`,
         yPosition, 12
       );
       yPosition += 6;
@@ -359,115 +375,156 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
       // doc.line(margin, yPosition, pageWidth - margin, yPosition);
       // yPosition += 15;
       
-      // Questions section (mirror the preview: group by section with headers and instructions)
+      // Questions section - group by subject (section_name)
       if (questions && questions.length > 0) {
-        // Build section order from template to preserve preview ordering
-        const sectionOrder: string[] = (template?.sections || [])
-          .map((s: any) => s.section_name)
-          .filter(Boolean);
-
-        // Group questions by section name
-        const questionsBySections: Record<string, any[]> = questions.reduce((acc: any, q: any, index: number) => {
-          const name = q.section_name || 'Questions';
-          if (!acc[name]) acc[name] = [];
-          acc[name].push({ ...q, originalIndex: index });
+        // Group questions by subject (section_name)
+        const questionsBySubject: Record<string, any[]> = questions.reduce((acc: any, q: any, index: number) => {
+          const subject = q.section_name || q.sectionName || 'General';
+          if (!acc[subject]) acc[subject] = [];
+          acc[subject].push({ ...q, originalIndex: index });
           return acc;
         }, {});
 
-        // Determine final ordered sections: template order first, then any remaining
-        const orderedSectionNames = [
-          ...sectionOrder.filter((n) => questionsBySections[n] && questionsBySections[n].length > 0),
-          ...Object.keys(questionsBySections).filter((n) => !sectionOrder.includes(n))
+        // Order subjects: Maths, Physics, Chemistry
+        const subjectOrder = ['Maths', 'Physics', 'Chemistry'];
+        const orderedSubjects = [
+          ...subjectOrder.filter((s) => questionsBySubject[s] && questionsBySubject[s].length > 0),
+          ...Object.keys(questionsBySubject).filter((s) => !subjectOrder.includes(s))
         ];
 
-        orderedSectionNames.forEach((sectionName) => {
-          const sectionMeta = (template?.sections || []).find((s: any) => s.section_name === sectionName) || {};
-          const sectionQuestions = questionsBySections[sectionName] || [];
+        orderedSubjects.forEach((subjectName) => {
+          const subjectQuestions = questionsBySubject[subjectName] || [];
 
-          // New page if needed for section header
+          // New page if needed for subject header
           if (yPosition > 240) {
             doc.addPage();
             yPosition = 30;
           }
 
-          
+          // Subject header
+          yPosition = addCenteredText(subjectName, yPosition, 13, 'bold');
 
-          // Section header
-          yPosition = addCenteredText(sectionName, yPosition, 13, 'bold');
-          // yPosition += 0.2;
-
-          // Line at top of section
+          // Line at top of subject
           doc.setLineWidth(0.3);
           doc.line(margin, yPosition, pageWidth - margin, yPosition);
-          yPosition += 6;
-
-          // Section instruction (centered under section title)
-          let sectionInstruction = '';
-          if (sectionMeta.section_type === 'Answer All Questions') {
-            sectionInstruction = `Answer all ${sectionMeta.total_questions} questions.`;
-          } else if (sectionMeta.section_type === 'Choose Any') {
-            sectionInstruction = `Answer any ${sectionMeta.questions_to_answer} questions out of ${sectionMeta.total_questions}.`;
-          } else if (sectionMeta.section_type === 'Optional') {
-            sectionInstruction = `Answer any ${sectionMeta.questions_to_answer || sectionMeta.total_questions} questions out of ${sectionMeta.total_questions}.`;
-          } else if (sectionMeta.total_questions) {
-            sectionInstruction = `Answer any ${Math.min(sectionMeta.total_questions, 5)} Questions.`;
-          }
-
-          if (sectionInstruction) {
-            // Centered instruction
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'normal');
-            const tw = doc.getTextWidth(sectionInstruction);
-            const x = (pageWidth - tw) / 2;
-            doc.text(sectionInstruction, x, yPosition);
-            yPosition += 16;
-          }
+          yPosition += 8;
 
           // Separator line after section instruction
           // doc.setLineWidth(0.3);
           // doc.line(margin, yPosition, pageWidth - margin, yPosition);
           // yPosition += 8;
 
-          // Each question in this section
-          sectionQuestions.forEach((question: any, idx: number) => {
+          // Helper function to convert superscript notation (m^2 -> m²)
+          const convertSuperscripts = (text: string): string => {
+            // Map common superscripts
+            const superscriptMap: { [key: string]: string } = {
+              '^0': '⁰', '^1': '¹', '^2': '²', '^3': '³', '^4': '⁴', '^5': '⁵',
+              '^6': '⁶', '^7': '⁷', '^8': '⁸', '^9': '⁹', '^+': '⁺', '^-': '⁻',
+              '^(': '⁽', '^)': '⁾', '^n': 'ⁿ', '^x': 'ˣ', '^y': 'ʸ'
+            };
+            
+            // Replace patterns like m^2, x^3, etc. with superscripts
+            // Handle both single digit and multi-digit exponents
+            return text.replace(/\^(\d+|[+\-()nxy])/g, (match, exp) => {
+              const key = `^${exp}`;
+              if (superscriptMap[key]) {
+                return superscriptMap[key];
+              }
+              // For multi-digit exponents, convert each digit
+              if (/^\d+$/.test(exp)) {
+                return exp.split('').map(d => superscriptMap[`^${d}`] || d).join('');
+              }
+              return match;
+            });
+          };
+
+          // Each question in this subject
+          subjectQuestions.forEach((question: any, idx: number) => {
             if (yPosition > 260) {
               doc.addPage();
               yPosition = 30;
             }
 
-            // Left: question number + text
-            const numberLabel = `${question.question_number || idx + 1})`;
-            // Remove any trailing [xM] marks from text since we show them on the right
-            const cleanedText = String(question.question_text || '').replace(/\s*\[[0-9]+\.?[0-9]*\s*M\]/gi, '').trim();
+            // Left: question number + text (no BTL or marks on right)
+            // Always use question_number for sequential 1-75 numbering across all subjects
+            const numberLabel = `${question.question_number ?? (idx + 1)})`;
+            // Remove any trailing [xM] marks and BTL from text
+            let cleanedText = String(question.question_text || '')
+              .replace(/\s*\[[0-9]+\.?[0-9]*\s*M\]/gi, '')
+              .replace(/\s*BTL\d+/gi, '')
+              .trim();
+            
+            // Remove leading question numbers (e.g., "1) ", "1. ", "1) " at start)
+            cleanedText = cleanedText.replace(/^\d+[\)\.]\s*/, '').trim();
+            
+            // Convert superscripts (m^2 -> m²)
+            cleanedText = convertSuperscripts(cleanedText);
+            
             const mainText = `${numberLabel} ${cleanedText}`;
-            // Right: BTL and Marks
-            const btl = (question.btl_level ? `BTL${String(question.btl_level).replace(/[^0-9]/g, '')}` : 'BTL3');
-            const marksStr = `[${question.marks || 0}M]`;
-            const rightText = `${btl}   ${marksStr}`;
 
-            // Render right-aligned BTL/Marks at current y
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'normal');
-            const rtw = doc.getTextWidth(rightText);
-            doc.text(rightText, pageWidth - margin - rtw, yPosition);
-
-            // Render main question text with wrapping, leaving space for right text
-            const effectiveWidth = Math.max(80, contentWidth - (rtw + 8));
-            yPosition = addWrappedText(mainText, margin, yPosition, effectiveWidth, 11, 'normal');
+            // Render main question text with full width (no right-side BTL/marks)
+            yPosition = addWrappedText(mainText, margin, yPosition, contentWidth, 11, 'normal');
             yPosition += 6;
 
-            if (question.question_type === 'MCQ' && question.options) {
-              question.options.forEach((option: string, optionIndex: number) => {
+            // Handle MCQ options - display with proper spacing
+            // Hide options for questions 21-25, 46-50, 71-75 (show_options === false)
+            const shouldShowOptions = question.show_options !== false; // Show if true or undefined, hide if false
+            
+            if (shouldShowOptions && 
+                (question.question_type?.toLowerCase().includes('mcq') || 
+                 question.question_type?.toLowerCase().includes('multiple') ||
+                 question.question_type?.toLowerCase() === 'multiple choice') && 
+                question.options && Array.isArray(question.options) && question.options.length > 0) {
+              
+              // Format options with better spacing and alignment
+              // Each option: A) text, with consistent spacing between options
+              const formattedOptions = question.options.map((opt: string, index: number) => {
+                // Extract option letter and text
+                const letterMatch = opt.match(/^([A-D])\)/i);
+                const letter = letterMatch ? letterMatch[1] : String.fromCharCode(65 + index);
+                const cleanOpt = opt.replace(/^[A-D]\)\s*/i, '').trim();
+                return { letter, text: cleanOpt };
+              });
+              
+              // Calculate spacing for better alignment
+              // Use tab-like spacing: each option gets consistent width
+              const maxOptionWidth = Math.max(...formattedOptions.map(opt => opt.text.length));
+              const spacing = '    '; // 4 spaces between options
+              
+              // Format options on same line with proper spacing
+              const optionsText = formattedOptions
+                .map(opt => `${opt.letter}) ${opt.text}`)
+                .join(spacing);
+              
+              if (yPosition > 270) {
+                doc.addPage();
+                yPosition = 30;
+              }
+              
+              // Add indentation for options (align with question text)
+              const optionIndent = margin + 8;
+              yPosition = addWrappedText(optionsText, optionIndent, yPosition, contentWidth - 8, 10, 'normal');
+              yPosition += 6;
+            } else if (shouldShowOptions && question.question_text) {
+              // Try to extract options from question text if not in options array
+              const optionPattern = /([A-D])\)\s*([^A-D\)]+?)(?=\s+[A-D]\)|$)/gi;
+              const matches = Array.from(question.question_text.matchAll(optionPattern));
+              if (matches.length >= 2) {
+                const optionsText = matches
+                  .map((match) => `${match[1]}) ${match[2].trim()}`)
+                  .join('    '); // 4 spaces between options
+                
                 if (yPosition > 270) {
                   doc.addPage();
                   yPosition = 30;
                 }
-                const optionLetter = String.fromCharCode(97 + optionIndex);
-                yPosition = addWrappedText(`${optionLetter}) ${option}`, margin + 8, yPosition, contentWidth - 8, 10, 'normal');
-                yPosition += 4;
-              });
-              yPosition += 3;
+                
+                const optionIndent = margin + 8;
+                yPosition = addWrappedText(optionsText, optionIndent, yPosition, contentWidth - 8, 10, 'normal');
+                yPosition += 6;
+              }
             }
+            // If show_options === false, skip rendering options entirely
           });
 
           // Section footer line
@@ -510,14 +567,29 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
           };
         }
       } else {
-        const fileName = `${questionPaper.name || 'Question Paper'}.pdf`;
-        doc.save(fileName);
+        // Download PDF
+        const fileName = `${(questionPaper.name || 'Question Paper').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+        try {
+          doc.save(fileName);
+        } catch (error) {
+          console.error('Error saving PDF:', error);
+          // Fallback: use blob URL
+          const blob = doc.output('blob');
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
       }
       
     } catch (error) {
       console.error('Error generating PDF:', error);
-      // Fallback to text download if PDF generation fails
-      generateTextDownload();
+      alert('Failed to generate PDF. Please check the console for details and ensure jsPDF is properly installed.');
+      throw error; // Don't fallback to text
     }
   };
 
@@ -544,7 +616,9 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
     content += `${template?.course_name || 'Course'} (${template?.course_code || 'Code'})\n\n`;
     content += `Max Marks: ${calculateTotalMarks()} | Duration: ${template?.duration_minutes || 0} Minutes\n`;
     if (template?.exam_date) {
-      content += `Date: ${new Date(template.exam_date).toLocaleDateString()} | Time: ${template.exam_time || 'TBA'}\n`;
+      const date = new Date(template.exam_date);
+      const dateStr = isNaN(date.getTime()) ? template.exam_date : date.toLocaleDateString();
+      content += `Date: ${dateStr} | Time: ${template.exam_time || 'TBA'}\n`;
     }
     content += `\n${'='.repeat(60)}\n\n`;
     
@@ -567,16 +641,72 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
   };
 
   const calculateTotalMarks = () => {
+    // First, try to calculate from actual questions if available
+    const currentQuestions = isEditing ? editedQuestions : questionPaper.questions;
+    if (currentQuestions && Array.isArray(currentQuestions) && currentQuestions.length > 0) {
+      const total = currentQuestions.reduce((sum: number, q: any) => {
+        const marks = q.marks || q.marksPerQuestion || 0;
+        return sum + (typeof marks === 'number' ? marks : parseFloat(marks) || 0);
+      }, 0);
+      if (total > 0) return total;
+    }
+    
+    // Fallback to template sections
     const template = questionPaper.template;
-    if (!template?.sections) return questionPaper.totalMarks?.replace(' Max Marks', '') || '0';
+    if (!template?.sections) {
+      // Try to get from questionPaper.totalMarks
+      if (questionPaper.totalMarks) {
+        const marks = typeof questionPaper.totalMarks === 'string' 
+          ? questionPaper.totalMarks.replace(' Max Marks', '').replace(' marks', '')
+          : questionPaper.totalMarks;
+        return parseFloat(marks.toString()) || 0;
+      }
+      return 0;
+    }
     
     return template.sections.reduce((total: number, section: any) => {
-      if (section.section_type === 'Answer All Questions') {
-        return total + (section.total_questions * section.marks_per_question);
-      } else {
-        return total + (section.questions_to_answer * section.marks_per_question);
-      }
+      const sectionType = section.sectionType || section.section_type;
+      const totalQuestions = section.totalQuestions || section.total_questions || 0;
+      const questionsToAnswer = section.questionsToAnswer || section.questions_to_answer || totalQuestions;
+      const marksPerQuestion = section.marksPerQuestion || section.marks_per_question || 0;
+      const totalMarks = section.totalMarks || (sectionType === 'Answer All Questions' 
+        ? totalQuestions * marksPerQuestion
+        : questionsToAnswer * marksPerQuestion
+      );
+      
+      return total + (totalMarks || 0);
     }, 0);
+  };
+  
+  const calculateSectionMarks = (section: any, sectionQuestions: any[] = []) => {
+    // If we have actual questions for this section, calculate from them
+    if (sectionQuestions && sectionQuestions.length > 0) {
+      const total = sectionQuestions.reduce((sum: number, q: any) => {
+        const marks = q.marks || q.marksPerQuestion || 0;
+        const marksNum = typeof marks === 'number' ? marks : parseFloat(String(marks)) || 0;
+        return sum + marksNum;
+      }, 0);
+      if (total > 0) return total;
+    }
+    
+    // Otherwise calculate from section definition
+    const sectionType = section.sectionType || section.section_type;
+    const totalQuestions = parseInt(section.totalQuestions || section.total_questions || '0');
+    const questionsToAnswer = parseInt(section.questionsToAnswer || section.questions_to_answer || String(totalQuestions));
+    const marksPerQuestion = parseFloat(section.marksPerQuestion || section.marks_per_question || '0');
+    
+    // Check if section has totalMarks already calculated
+    if (section.totalMarks) {
+      const totalMarks = typeof section.totalMarks === 'number' ? section.totalMarks : parseFloat(String(section.totalMarks)) || 0;
+      if (totalMarks > 0) return totalMarks;
+    }
+    
+    // Calculate based on section type
+    if (sectionType === 'Answer All Questions') {
+      return totalQuestions * marksPerQuestion;
+    } else {
+      return questionsToAnswer * marksPerQuestion;
+    }
   };
 
   const currentQuestions = isEditing ? editedQuestions : questionPaper.questions;
@@ -656,127 +786,127 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
                   )}
                 </div>
 
-                {/* Question Paper Sections - matches step 1 format exactly */}
+                {/* Question Paper Sections - Show questions grouped by subject */}
                 <div className="space-y-8">
-                  {template?.sections && template.sections.length > 0 ? (
-                    template.sections.map((section: any, index: number) => (
-                      <div key={index} className="print-section">
-                        <div className="text-center mb-4">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                            {section.section_name || `Section ${index + 1}`}
-                          </h4>
-                          <div className="text-sm text-gray-600 mb-2">
-                            {section.section_type === 'Answer All Questions' ? (
-                              <p>Answer all {section.total_questions} questions.</p>
-                            ) : section.section_type === 'Choose Any' ? (
-                              <p>Answer any {section.questions_to_answer} questions out of {section.total_questions}.</p>
-                            ) : section.section_type === 'Optional' ? (
-                              <p>This section is optional. Answer any {section.questions_to_answer} questions out of {section.total_questions}.</p>
-                            ) : (
-                              <p>Answer any {Math.min(section.total_questions || 5, 5)} Questions.</p>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            Each question carries {section.marks_per_question} mark{section.marks_per_question > 1 ? 's' : ''}.
-                          </p>
-                        </div>
+                  {(() => {
+                    // Group questions by section_name (subject)
+                    const questionsBySubject: Record<string, any[]> = {};
+                    currentQuestions.forEach((q: any) => {
+                      const subject = q.section_name || q.sectionName || 'General';
+                      if (!questionsBySubject[subject]) {
+                        questionsBySubject[subject] = [];
+                      }
+                      questionsBySubject[subject].push(q);
+                    });
+                    
+                    // Order subjects: Maths, Physics, Chemistry
+                    const subjectOrder = ['Maths', 'Physics', 'Chemistry'];
+                    const subjects = [
+                      ...subjectOrder.filter((s) => questionsBySubject[s] && questionsBySubject[s].length > 0),
+                      ...Object.keys(questionsBySubject).filter((s) => !subjectOrder.includes(s))
+                    ];
+                    
+                    if (subjects.length > 0) {
+                      return subjects.map((subject, subjectIndex: number) => {
+                        const subjectQuestions = questionsBySubject[subject];
+                        const subjectMarks = subjectQuestions.reduce((sum: number, q: any) => {
+                          return sum + (q.marks || 0);
+                        }, 0);
                         
-                        {/* Generated Questions or Sample Questions */}
-                        <div className="space-y-4">
-                          {/* If we have actual generated questions for this section, show them */}
-                          {currentQuestions.filter((q: any) => q.section_name === section.section_name).length > 0 ? (
-                            currentQuestions
-                              .filter((q: any) => q.section_name === section.section_name)
-                              .map((question: any, qIndex: number) => (
+                        return (
+                          <div key={subjectIndex} className="print-section">
+                            <div className="text-center mb-4">
+                              <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                                {subject}
+                              </h4>
+                            </div>
+                            
+                            {/* Generated Questions */}
+                            <div className="space-y-4">
+                              {subjectQuestions.map((question: any, qIndex: number) => (
                                 <div key={qIndex} className="flex">
                                   <span className="mr-4 font-medium text-gray-900 flex-shrink-0">
-                                    {question.question_number || qIndex + 1})
+                                    {question.question_number ?? (qIndex + 1)})
                                   </span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-gray-900 mb-2 break-words">{question.question_text}</p>
-                                    
-                                    {/* Enhanced MCQ rendering in template preview */}
-                                    {(question.question_type?.toLowerCase().includes('mcq') || 
-                                      question.question_type?.toLowerCase().includes('multiple') ||
-                                      question.question_type?.toLowerCase() === 'multiple choice') && 
-                                     question.options && Array.isArray(question.options) && question.options.length > 0 && (
-                                      <div className="ml-4 space-y-1 text-sm text-gray-700">
-                                        {question.options.map((option: string, optionIndex: number) => {
-                                          const optionLetter = option.match(/^([A-D])\)/)?.[1];
-                                          const isCorrect = question.correct_answer && 
-                                            (question.correct_answer.toUpperCase() === optionLetter?.toUpperCase() ||
-                                             option.toLowerCase().includes('correct answer'));
+                                    {(() => {
+                                      // Extract question text and options
+                                      let questionText = question.question_text || '';
+                                      // Remove leading question numbers (e.g., "1) ", "1. " at start)
+                                      questionText = questionText.replace(/^\d+[\)\.]\s*/, '').trim();
+                                      let options: string[] = [];
+                                      
+                                      // First, check if options are in the options array
+                                      if (question.options && Array.isArray(question.options) && question.options.length > 0) {
+                                        options = question.options;
+                                      } else {
+                                        // Try to extract options from question text
+                                        const optionPattern = /([A-D])\)\s*([^A-D\)]+?)(?=\s+[A-D]\)|$)/gi;
+                                        const matches = Array.from(questionText.matchAll(optionPattern));
+                                        if (matches.length >= 2) {
+                                          options = matches.map(match => `${match[1]}) ${match[2].trim()}`);
+                                          // Remove options from question text
+                                          matches.forEach(match => {
+                                            questionText = questionText.replace(match[0], '').trim();
+                                          });
+                                        }
+                                      }
+                                      
+                                      // Clean up question text - remove any remaining option patterns
+                                      questionText = questionText.replace(/\s*[A-D]\)\s*[^\n]+/gi, '').trim();
+                                      
+                                      // Remove introductory text patterns
+                                      questionText = questionText.replace(/^(here are|questions|part \d+|###|additional).*?$/gmi, '').trim();
+                                      
+                                      return (
+                                        <>
+                                          <p className="text-gray-900 mb-2 break-words">{questionText}</p>
                                           
-                                          return (
-                                            <p key={optionIndex} className={
-                                              isCorrect 
-                                                ? 'font-medium text-green-700' 
-                                                : ''
-                                            }>
-                                              {option}
-                                            </p>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
+                                          {/* MCQ Options - Display on same line with proper spacing */}
+                                          {/* Only show options if show_options is not false */}
+                                          {(question.question_type?.toLowerCase().includes('mcq') || 
+                                            question.question_type?.toLowerCase().includes('multiple') ||
+                                            question.question_type?.toLowerCase() === 'multiple choice') && 
+                                           options.length > 0 && 
+                                           (question.show_options !== false) && (
+                                            <div className="ml-4 mt-2 text-sm text-gray-700">
+                                              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                                                {options.map((option: string, optionIndex: number) => (
+                                                  <span key={optionIndex} className="whitespace-nowrap font-medium">
+                                                    {option}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
-                              ))
-                          ) : (
-                            /* Show sample questions if no generated questions */
-                            Array.from({ length: section.total_questions || 0 }, (_, qIndex) => (
-                              <div key={qIndex} className="flex">
-                                <span className="mr-4 font-medium text-gray-900 flex-shrink-0">{qIndex + 1})</span>
-                                <div className="flex-1 min-w-0">
-                                  {(section.question_type?.toLowerCase().includes('multiple') || 
-                                    section.question_type?.toLowerCase() === 'multiple choice') ? (
-                                    <div>
-                                      <p className="text-gray-900 mb-2 break-words">Sample multiple choice question for {section.question_type}?</p>
-                                      <div className="ml-4 space-y-1 text-sm text-gray-700">
-                                        <p>a) Option A</p>
-                                        <p>b) Option B</p>
-                                        <p>c) Option C</p>
-                                        <p>d) Option D</p>
-                                      </div>
-                                    </div>
-                                  ) : section.question_type === 'True/False' ? (
-                                    <p className="text-gray-900 break-words">Sample statement for true/false evaluation. (True/False)</p>
-                                  ) : section.question_type === 'One Word' ? (
-                                    <p className="text-gray-900 break-words">Fill in the blank: _____ is the capital of India.</p>
-                                  ) : section.question_type === 'Short Answer' ? (
-                                    <p className="text-gray-900 break-words">Explain the concept in 2-3 sentences.</p>
-                                  ) : section.question_type === 'Essay' ? (
-                                    <p className="text-gray-900 break-words">Write a detailed essay on the given topic (200-300 words).</p>
-                                  ) : section.question_type === 'Fill in the Blank' ? (
-                                    <p className="text-gray-900 break-words">Complete the sentence: The process of _____ is essential for _____.</p>
-                                  ) : (
-                                    <p className="text-gray-900 break-words">Sample {(section.question_type || 'general').toLowerCase()} question.</p>
-                                  )}
-                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* Subject Summary */}
+                            <div className="mt-4 p-3 bg-gray-100 rounded-md text-sm text-gray-600 print:bg-white print:border print:border-gray-300">
+                              <div className="flex justify-between items-center">
+                                <span>{subject} Total:</span>
+                                <span className="font-medium">
+                                  {subjectMarks} marks
+                                </span>
                               </div>
-                            ))
-                          )}
-                        </div>
-                        
-                        {/* Section Summary - matches step 1 format */}
-                        <div className="mt-4 p-3 bg-gray-100 rounded-md text-sm text-gray-600 print:bg-white print:border print:border-gray-300">
-                          <div className="flex justify-between items-center">
-                            <span>Section Total:</span>
-                            <span className="font-medium">
-                              {section.section_type === 'Answer All Questions' 
-                                ? section.total_questions * section.marks_per_question
-                                : section.questions_to_answer * section.marks_per_question
-                              } marks
-                            </span>
+                            </div>
                           </div>
+                        );
+                      });
+                    } else {
+                      return (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500">No questions generated yet</p>
                         </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500">No sections defined for this template</p>
-                    </div>
-                  )}
+                      );
+                    }
+                  })()}
                 </div>
 
                 
@@ -1000,17 +1130,21 @@ const QuestionPaperPreview: React.FC<QuestionPaperPreviewProps> = ({
                 <div className="mt-8 p-4 bg-gray-50 border border-gray-200 rounded-md">
                   <h3 className="font-medium text-gray-900 mb-3">Paper Summary</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    {template.sections.map((section: any, index: number) => (
-                      <div key={index} className="flex justify-between">
-                        <span>{section.section_name || `Section ${index + 1}`}:</span>
-                        <span className="font-medium">
-                          {section.section_type === 'Answer All Questions' 
-                            ? section.total_questions * section.marks_per_question
-                            : section.questions_to_answer * section.marks_per_question
-                          } marks
-                        </span>
-                      </div>
-                    ))}
+                    {template.sections.map((section: any, index: number) => {
+                      const sectionName = section.sectionName || section.section_name;
+                      const sectionQuestions = currentQuestions.filter((q: any) => 
+                        (q.section_name === sectionName || q.sectionName === sectionName) && 
+                        (q.section_number === index + 1 || q.sectionNumber === index + 1)
+                      );
+                      return (
+                        <div key={index} className="flex justify-between">
+                          <span>{sectionName || `Section ${index + 1}`}:</span>
+                          <span className="font-medium">
+                            {calculateSectionMarks(section, sectionQuestions)} marks
+                          </span>
+                        </div>
+                      );
+                    })}
                     <div className="col-span-full border-t pt-2 flex justify-between font-medium">
                       <span>Total Marks:</span>
                       <span>{calculateTotalMarks()} marks</span>

@@ -30,8 +30,6 @@ const QuestionGeneration = () => {
   const [templateData, setTemplateData] = useState({
     templateName: '',
     instituteName: '',
-    courseName: '',
-    courseCode: '',
     duration: '',
     examDate: '',
     examTime: {
@@ -39,18 +37,20 @@ const QuestionGeneration = () => {
       minute: '',
       period: 'AM'
     },
-    sections: [
-      {
-        id: 1,
-        sectionName: '',
-        sectionType: 'Answer All Questions',
-        questionsType: 'Select Question Type',
-        totalQuestions: '',
-        questionsToAnswer: '',
-        marksPerQuestion: '',
-        customInstruction: ''
-      }
-    ]
+    totalQuestions: '75',  // Default for JEE Mains
+    totalMarks: '300',  // Default for JEE Mains
+    // sections: [  // Commented out for now
+    //   {
+    //     id: 1,
+    //     sectionName: '',
+    //     sectionType: 'Answer All Questions',
+    //     questionsType: 'Select Question Type',
+    //     totalQuestions: '',
+    //     questionsToAnswer: '',
+    //     marksPerQuestion: '',
+    //     customInstruction: ''
+    //   }
+    // ]
   });
   
   const [generatedTemplates, setGeneratedTemplates] = useState<any[]>([]);
@@ -59,19 +59,14 @@ const QuestionGeneration = () => {
   const [previewQuestionPaper, setPreviewQuestionPaper] = useState<any>(null);
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{id: string, type: 'paper' | 'template', name: string} | null>(null);
 
-  // Delete template handler
-  const handleDeleteTemplate = async (templateId: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await templateService.deleteTemplate(templateId);
-      setGeneratedTemplates(generatedTemplates.filter(t => t.id !== templateId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete template');
-    } finally {
-      setLoading(false);
-    }
+  // Delete template handler (now uses modal)
+  const handleDeleteTemplate = (templateId: string) => {
+    const template = generatedTemplates.find(t => t.id === templateId);
+    const templateName = template?.name || template?.template_name || 'this template';
+    showDeleteConfirmation(templateId, 'template', templateName);
   };
 
   // Load templates when component mounts or when switching to templates tab
@@ -80,7 +75,7 @@ const QuestionGeneration = () => {
       setLoading(true);
       const response = await templateService.getTemplates();
       // Handle both array and object responses
-      const templates = Array.isArray(response) ? response : (response.templates || response || []);
+      const templates = Array.isArray(response) ? response : [];
       console.log('Loaded templates:', templates);
       setGeneratedTemplates(templates);
     } catch (err) {
@@ -102,19 +97,11 @@ const QuestionGeneration = () => {
   const loadQuestionPapers = async () => {
     try {
       setLoading(true);
-      // Authentication removed
       
-      // Load both existing question papers and generated papers
-      const [questionPapersResponse, generatedPapersResponse] = await Promise.all([
-        questionPaperService.getQuestionPapers().catch(() => ({ question_papers: [] })),
-        fetch(getApiUrl('/api/generated-papers'), {
-          method: 'GET',
-          headers: { 'Authorization': `Bearer ${token}` }
-        }).then(res => res.ok ? res.json() : []).catch(() => [])
-      ]);
+      // Load question papers from the service
+      const questionPapersResponse = await questionPaperService.getQuestionPapers().catch(() => ({ question_papers: [] }));
 
       const existingPapers = questionPapersResponse.question_papers || [];
-      const generatedPapers = Array.isArray(generatedPapersResponse) ? generatedPapersResponse : [];
 
       // Format existing papers
       const formattedExistingPapers = existingPapers.map((paper: any) => ({
@@ -122,21 +109,8 @@ const QuestionGeneration = () => {
         type: 'existing' // Mark as existing paper
       }));
 
-      // Format generated papers for display
-      const formattedGeneratedPapers = generatedPapers.map((paper: any) => ({
-        id: paper.id,
-        name: paper.template_name || 'Generated Paper',
-        has_questions: paper.questions && paper.questions.length > 0,
-        created_at: paper.generated_at,
-        questions: paper.questions,
-        template_id: paper.template_id,
-        total_marks: paper.total_marks,
-        btl_levels: ['Generated Questions'],
-        type: 'generated' // Mark as generated paper
-      }));
-
-      // Combine and set
-      setQuestionPapers([...formattedGeneratedPapers, ...formattedExistingPapers]);
+      // Set question papers
+      setQuestionPapers(formattedExistingPapers);
     } catch (err) {
       console.error('Error loading question papers:', err);
       setError(err instanceof Error ? err.message : 'Failed to load question papers');
@@ -172,46 +146,46 @@ const QuestionGeneration = () => {
     }
   };
 
-  const handleSectionInputChange = (index: number, field: string, value: string) => {
-    const updatedSections = [...templateData.sections];
-    updatedSections[index] = { ...updatedSections[index], [field]: value };
-    
-    // Reset questionsToAnswer when sectionType changes
-    if (field === 'sectionType') {
-      if (value === 'Answer All Questions') {
-        updatedSections[index].questionsToAnswer = '';
-      } else {
-        updatedSections[index].questionsToAnswer = updatedSections[index].questionsToAnswer || updatedSections[index].totalQuestions;
-      }
-    }
-    
-    // Auto-calculate and update custom instruction when relevant fields change
-    if (['totalQuestions', 'questionsToAnswer', 'marksPerQuestion', 'sectionType'].includes(field)) {
-      updatedSections[index].customInstruction = generateCustomInstruction(updatedSections[index]);
-    }
-    
-    setTemplateData({ ...templateData, sections: updatedSections });
-  };
+  // const handleSectionInputChange = (index: number, field: string, value: string) => {  // Commented out for now
+  //   const updatedSections = [...templateData.sections];
+  //   updatedSections[index] = { ...updatedSections[index], [field]: value };
+  //   
+  //   // Reset questionsToAnswer when sectionType changes
+  //   if (field === 'sectionType') {
+  //     if (value === 'Answer All Questions') {
+  //       updatedSections[index].questionsToAnswer = '';
+  //     } else {
+  //       updatedSections[index].questionsToAnswer = updatedSections[index].questionsToAnswer || updatedSections[index].totalQuestions;
+  //     }
+  //   }
+  //   
+  //   // Auto-calculate and update custom instruction when relevant fields change
+  //   if (['totalQuestions', 'questionsToAnswer', 'marksPerQuestion', 'sectionType'].includes(field)) {
+  //     updatedSections[index].customInstruction = generateCustomInstruction(updatedSections[index]);
+  //   }
+  //   
+  //   setTemplateData({ ...templateData, sections: updatedSections });
+  // };
 
-  // Add section button with proper key
-  const addSection = () => {
-    setTemplateData({
-      ...templateData,
-      sections: [
-        ...templateData.sections,
-        {
-          id: templateData.sections.length + 1,
-          sectionName: '',
-          sectionType: 'Answer All Questions',
-          questionsType: 'Select Question Type',
-          totalQuestions: '',
-          questionsToAnswer: '',
-          marksPerQuestion: '',
-          customInstruction: ''
-        }
-      ]
-    });
-  };
+  // // Add section button with proper key  // Commented out for now
+  // const addSection = () => {
+  //   setTemplateData({
+  //     ...templateData,
+  //     sections: [
+  //       ...templateData.sections,
+  //       {
+  //         id: templateData.sections.length + 1,
+  //         sectionName: '',
+  //         sectionType: 'Answer All Questions',
+  //         questionsType: 'Select Question Type',
+  //         totalQuestions: '',
+  //         questionsToAnswer: '',
+  //         marksPerQuestion: '',
+  //         customInstruction: ''
+  //       }
+  //     ]
+  //   });
+  // };
 
   // Add edit template handler
   const handleEditTemplate = async (templateId: string) => {
@@ -246,8 +220,6 @@ const QuestionGeneration = () => {
       const formattedTemplateData = {
         templateName: template.name || template.template_name || template.templateName || '',
         instituteName: template.institute_name || template.instituteName || '',
-        courseName: template.course_name || template.courseName || '',
-        courseCode: template.course_code || template.courseCode || '',
         duration: (template.duration_minutes || template.duration || '').toString().replace(' Minutes', ''),
         examDate: template.exam_date || template.examDate || '',
         examTime: {
@@ -255,27 +227,18 @@ const QuestionGeneration = () => {
           minute: template.exam_time?.minute || template.examTime?.minute || '',
           period: template.exam_time?.period || template.examTime?.period || 'AM'
         },
-        sections: template.sections?.map((section: any, index: number) => ({
-          id: index + 1,
-          sectionName: section.section_name || section.sectionName || `Section ${index + 1}`,
-          sectionType: section.section_type || section.sectionType || 'Answer All Questions',
-          questionsType: section.question_type || section.questionsType || section.questions_type || 'Multiple Choice',
-          totalQuestions: (section.total_questions || section.totalQuestions || '').toString(),
-          questionsToAnswer: (section.questions_to_answer || section.questionsToAnswer || '').toString(),
-          marksPerQuestion: (section.marks_per_question || section.marksPerQuestion || '').toString(),
-          customInstruction: section.custom_instruction || section.customInstruction || ''
-        })) || [
-          {
-            id: 1,
-            sectionName: 'Section 1',
-            sectionType: 'Answer All Questions',
-            questionsType: 'Multiple Choice',
-            totalQuestions: '',
-            questionsToAnswer: '',
-            marksPerQuestion: '',
-            customInstruction: ''
-          }
-        ]
+        totalQuestions: (template.totalQuestions || template.total_questions || '75').toString(),
+        totalMarks: (template.totalMarks || template.total_marks || '300').toString(),
+        // sections: template.sections?.map((section: any, index: number) => ({  // Commented out for now
+        //   id: index + 1,
+        //   sectionName: section.section_name || section.sectionName || `Section ${index + 1}`,
+        //   sectionType: section.section_type || section.sectionType || 'Answer All Questions',
+        //   questionsType: section.questionType || section.question_type || section.questionsType || section.questions_type || 'Multiple Choice',
+        //   totalQuestions: (section.total_questions || section.totalQuestions || '').toString(),
+        //   questionsToAnswer: (section.questions_to_answer || section.questionsToAnswer || '').toString(),
+        //   marksPerQuestion: (section.marks_per_question || section.marksPerQuestion || '').toString(),
+        //   customInstruction: section.custom_instruction || section.customInstruction || ''
+        // })) || []
       };
 
       console.log('Formatted template data for editing:', formattedTemplateData);
@@ -300,21 +263,21 @@ const QuestionGeneration = () => {
     setTemplateData({
       templateName: '',
       instituteName: '',
-      courseName: '',
-      courseCode: '',
       duration: '',
       examDate: '',
       examTime: { hour: '', minute: '', period: 'AM' },
-      sections: [{
-        id: 1,
-        sectionName: '',
-        sectionType: 'Answer All Questions',
-        questionsType: 'Select Question Type',
-        totalQuestions: '',
-        questionsToAnswer: '',
-        marksPerQuestion: '',
-        customInstruction: ''
-      }]
+      totalQuestions: '75',  // Default for JEE Mains
+      totalMarks: '300',  // Default for JEE Mains
+      // sections: [{  // Commented out for now
+      //   id: 1,
+      //   sectionName: '',
+      //   sectionType: 'Answer All Questions',
+      //   questionsType: 'Select Question Type',
+      //   totalQuestions: '',
+      //   questionsToAnswer: '',
+      //   marksPerQuestion: '',
+      //   customInstruction: ''
+      // }]
     });
     setShowTemplateCreation(true);
   };
@@ -325,7 +288,7 @@ const QuestionGeneration = () => {
       setError(null);
 
       // Validation
-      if (!templateData.templateName || !templateData.instituteName || !templateData.courseName || !templateData.courseCode) {
+      if (!templateData.templateName || !templateData.instituteName) {
         throw new Error('Please fill in all required fields');
       }
 
@@ -337,26 +300,37 @@ const QuestionGeneration = () => {
         throw new Error('Please select exam time');
       }
 
-      for (const section of templateData.sections) {
-        if (!section.sectionName || !section.questionsType || section.questionsType === 'Select Question Type') {
-          throw new Error(`Please complete all section details for Section ${section.id}`);
-        }
-        if (!section.totalQuestions || !section.marksPerQuestion) {
-          throw new Error(`Please fill in total questions and marks per question for Section ${section.id}`);
-        }
-        if ((section.sectionType === 'Choose Any' || section.sectionType === 'Optional') && !section.questionsToAnswer) {
-          throw new Error(`Please specify questions to be answered for Section ${section.id}`);
-        }
+      if (!templateData.totalQuestions || !templateData.totalMarks) {
+        throw new Error('Please fill in total questions and total marks');
       }
 
-      // Authentication removed
+      const totalQuestions = parseInt(templateData.totalQuestions);
+      const totalMarks = parseInt(templateData.totalMarks);
+
+      if (isNaN(totalQuestions) || totalQuestions <= 0) {
+        throw new Error('Total questions must be a positive number');
+      }
+
+      if (isNaN(totalMarks) || totalMarks <= 0) {
+        throw new Error('Total marks must be a positive number');
+      }
+
+      // for (const section of templateData.sections) {  // Commented out for now
+      //   if (!section.sectionName || !section.questionsType || section.questionsType === 'Select Question Type') {
+      //     throw new Error(`Please complete all section details for Section ${section.id}`);
+      //   }
+      //   if (!section.totalQuestions || !section.marksPerQuestion) {
+      //     throw new Error(`Please fill in total questions and marks per question for Section ${section.id}`);
+      //   }
+      //   if ((section.sectionType === 'Choose Any' || section.sectionType === 'Optional') && !section.questionsToAnswer) {
+      //     throw new Error(`Please specify questions to be answered for Section ${section.id}`);
+      //   }
+      // }
 
       // Format template data for API
       const formattedData = {
         templateName: templateData.templateName.trim(),
         instituteName: templateData.instituteName.trim(),
-        courseName: templateData.courseName.trim(),
-        courseCode: templateData.courseCode.trim(),
         duration: parseInt(templateData.duration),
         examDate: templateData.examDate.trim(),
         examTime: {
@@ -364,20 +338,30 @@ const QuestionGeneration = () => {
           minute: templateData.examTime.minute,
           period: templateData.examTime.period
         },
-        sections: templateData.sections.map(section => ({
-          sectionName: section.sectionName.trim(),
-          sectionType: section.sectionType,
-          questionsType: section.questionsType,
-          totalQuestions: parseInt(section.totalQuestions),
-          questionsToAnswer: section.sectionType === 'Answer All Questions' 
-            ? parseInt(section.totalQuestions) 
-            : parseInt(section.questionsToAnswer || section.totalQuestions),
-          marksPerQuestion: parseFloat(section.marksPerQuestion),
-          customInstruction: section.customInstruction.trim()
-        }))
+        totalQuestions: totalQuestions,
+        totalMarks: totalMarks,
+        // sections: templateData.sections.map(section => {  // Commented out for now
+        //   const totalQuestions = parseInt(section.totalQuestions);
+        //   const questionsToAnswer = section.sectionType === 'Answer All Questions' 
+        //     ? totalQuestions 
+        //     : parseInt(section.questionsToAnswer || section.totalQuestions);
+        //   const marksPerQuestion = parseFloat(section.marksPerQuestion);
+        //   const totalMarks = questionsToAnswer * marksPerQuestion;
+        //   
+        //   return {
+        //     sectionName: section.sectionName.trim(),
+        //     sectionType: section.sectionType,
+        //     questionType: section.questionsType || 'Multiple Choice',
+        //     totalQuestions: totalQuestions,
+        //     questionsToAnswer: questionsToAnswer,
+        //     marksPerQuestion: marksPerQuestion,
+        //     totalMarks: totalMarks,
+        //     customInstruction: section.customInstruction.trim()
+        //   };
+        // })
       };
 
-      let savedTemplate;
+      let savedTemplate: any;
       if (editingTemplate) {
         console.log('Updating template:', editingTemplate.id, formattedData);
         // Update existing template
@@ -407,21 +391,21 @@ const QuestionGeneration = () => {
       setTemplateData({
         templateName: '',
         instituteName: '',
-        courseName: '',
-        courseCode: '',
         duration: '',
         examDate: '',
         examTime: { hour: '', minute: '', period: 'AM' },
-        sections: [{
-          id: 1,
-          sectionName: '',
-          sectionType: 'Answer All Questions',
-          questionsType: 'Select Question Type',
-          totalQuestions: '',
-          questionsToAnswer: '',
-          marksPerQuestion: '',
-          customInstruction: ''
-        }]
+        totalQuestions: '75',
+        totalMarks: '300',
+        // sections: [{  // Commented out for now
+        //   id: 1,
+        //   sectionName: '',
+        //   sectionType: 'Answer All Questions',
+        //   questionsType: 'Select Question Type',
+        //   totalQuestions: '',
+        //   questionsToAnswer: '',
+        //   marksPerQuestion: '',
+        //   customInstruction: ''
+        // }]
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save template';
@@ -437,19 +421,27 @@ const QuestionGeneration = () => {
     if (section.sections) {
       // This is a template object
       return section.sections.reduce((total: number, sect: any) => {
-        if (sect.section_type === 'Answer All Questions') {
-          return total + (sect.total_questions * sect.marks_per_question);
+        // Support both camelCase (from backend) and snake_case (legacy)
+        const sectionType = sect.sectionType || sect.section_type;
+        const totalQuestions = sect.totalQuestions || sect.total_questions || 0;
+        const questionsToAnswer = sect.questionsToAnswer || sect.questions_to_answer || totalQuestions;
+        const marksPerQuestion = sect.marksPerQuestion || sect.marks_per_question || 0;
+        const totalMarks = sect.totalMarks || (questionsToAnswer * marksPerQuestion);
+        
+        if (sectionType === 'Answer All Questions') {
+          return total + (totalMarks || (totalQuestions * marksPerQuestion));
         } else {
-          return total + (sect.questions_to_answer * sect.marks_per_question);
+          return total + (totalMarks || (questionsToAnswer * marksPerQuestion));
         }
       }, 0);
     } else {
       // This is an individual section
-      const totalQuestions = parseInt(section.totalQuestions) || 0;
-      const questionsToAnswer = parseInt(section.questionsToAnswer) || totalQuestions;
-      const marksPerQuestion = parseInt(section.marksPerQuestion) || 0;
+      const totalQuestions = parseInt(section.totalQuestions || section.total_questions) || 0;
+      const questionsToAnswer = parseInt(section.questionsToAnswer || section.questions_to_answer) || totalQuestions;
+      const marksPerQuestion = parseFloat(section.marksPerQuestion || section.marks_per_question) || 0;
       
-      if (section.sectionType === 'Answer All Questions') {
+      const sectionType = section.sectionType || section.section_type;
+      if (sectionType === 'Answer All Questions') {
         return totalQuestions * marksPerQuestion;
       } else {
         return questionsToAnswer * marksPerQuestion;
@@ -492,37 +484,8 @@ const QuestionGeneration = () => {
       
       // Authentication removed
       
-      // Use the new structured generation endpoint
-      const response = await fetch(getApiUrl('/api/generate-questions'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          template_id: template.id,
-          topic: topic,
-          difficulty_level: difficulty
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to generate questions');
-      }
-
-      const generatedPaper = await response.json();
-      
-      // Add to question papers list
-      setQuestionPapers([generatedPaper, ...questionPapers]);
-      
-      // Show preview with structured questions
-      setPreviewQuestionPaper({
-        ...generatedPaper,
-        questions: generatedPaper.questions // Already structured as individual objects
-      });
-      setShowPreview(true);
-      
+      // This function is deprecated - question generation is handled in QuestionPaper component
+      throw new Error('This function is deprecated. Please use the question generation flow in Question Paper page.');
     } catch (err) {
       console.error('Error generating structured questions:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate questions');
@@ -537,107 +500,52 @@ const QuestionGeneration = () => {
       setError(null);
       // Authentication removed
 
-      let fullDetails;
+      // Fetch question paper details using the service
+      const fullDetails = await questionPaperService.getQuestionPaper(paper.id);
       
-      if (paper.type === 'generated') {
-        // For generated papers, fetch from generated-papers endpoint
-        const response = await fetch(getApiUrl(`/api/generated-papers/${paper.id}`), {
-          method: 'GET',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Failed to fetch generated paper details');
+      // Fetch complete template details to ensure we have all information
+      let templateDetails: any = null;
+      if (fullDetails.templateId) {
+        try {
+          templateDetails = await templateService.getTemplate(fullDetails.templateId);
+        } catch (templateErr) {
+          console.warn('Could not fetch complete template details:', templateErr);
         }
-        
-        fullDetails = await response.json();
-        
-        // Fetch complete template details to ensure we have all information
-        if (fullDetails.template_id) {
-          try {
-            const templateResponse = await fetch(getApiUrl(`/api/templates/${fullDetails.template_id}`), {
-              method: 'GET',
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (templateResponse.ok) {
-              const completeTemplate = await templateResponse.json();
-              // Merge template details into fullDetails
-              fullDetails.template = {
-                template_name: completeTemplate.name || completeTemplate.template_name,
-                institute_name: completeTemplate.institute_name,
-                course_name: completeTemplate.course_name,
-                course_code: completeTemplate.course_code,
-                duration_minutes: completeTemplate.duration_minutes || completeTemplate.duration?.replace(' Minutes', ''),
-                exam_date: completeTemplate.exam_date,
-                exam_time: formatExamTime(completeTemplate.exam_time || completeTemplate.examTime),
-                sections: completeTemplate.sections || []
-              };
-            }
-          } catch (templateErr) {
-            console.warn('Could not fetch complete template details:', templateErr);
-          }
-        }
-        
-        // Format for preview component with complete template details
-        const formattedPaper = {
-          id: fullDetails.id,
-          name: fullDetails.template_name || paper.name,
-          template_name: fullDetails.template_name || paper.name,
-          subject: fullDetails.template?.course_name || 'General',
-          grade: fullDetails.template?.course_code || 'N/A',
-          totalMarks: fullDetails.total_marks ? `${fullDetails.total_marks} Max Marks` : '0 Max Marks',
-          duration: fullDetails.template?.duration_minutes ? `${fullDetails.template.duration_minutes} Minutes` : '0 Minutes',
-          createdAt: new Date(fullDetails.generated_at || fullDetails.created_at).toLocaleDateString(),
-          questions: fullDetails.questions || [], // Structured question objects
-          has_questions: fullDetails.questions && fullDetails.questions.length > 0,
-          type: paper.type,
-          template: fullDetails.template || {
-            template_name: fullDetails.template_name || paper.name,
-            institute_name: 'Institute Name',
-            course_name: 'Course Name',
-            course_code: 'Course Code',
-            duration_minutes: '0',
-            exam_date: null,
-            exam_time: null,
-            sections: []
-          }
-        };
-        
-        console.log('Formatted generated paper for preview:', formattedPaper);
-        setPreviewQuestionPaper(formattedPaper);
-        setShowPreview(true);
-        return;
       }
-
-      // For existing papers, use existing service
-      fullDetails = await questionPaperService.getQuestionPaperDetails(paper.id);
       
       // Format for preview component with complete template details
       const formattedPaper = {
         id: fullDetails.id,
-        name: fullDetails.template_name || fullDetails.name,
-        template_name: fullDetails.template_name || fullDetails.name,
-        subject: fullDetails.course_name || 'General',
-        grade: fullDetails.course_code || 'N/A',
-        totalMarks: fullDetails.total_marks ? `${fullDetails.total_marks} Max Marks` : '0 Max Marks',
-        duration: fullDetails.duration_minutes ? `${fullDetails.duration_minutes} Minutes` : '0 Minutes',
-        createdAt: new Date(fullDetails.generated_at || fullDetails.created_at).toLocaleDateString(),
+        name: fullDetails.name || fullDetails.templateName,
+        template_name: fullDetails.templateName || (fullDetails as any).template_name || fullDetails.name,
+        subject: 'General',
+        grade: 'N/A',
+        totalMarks: fullDetails.totalMarks ? `${fullDetails.totalMarks} Max Marks` : '0 Max Marks',
+        duration: templateDetails ? `${templateDetails.duration || templateDetails.duration_minutes || '0'} Minutes` : '0 Minutes',
+        createdAt: (() => {
+          const dateStr = fullDetails.createdAt || (fullDetails as any).created_at;
+          if (dateStr) {
+            const date = new Date(dateStr);
+            return isNaN(date.getTime()) ? new Date().toLocaleDateString() : date.toLocaleDateString();
+          }
+          return new Date().toLocaleDateString();
+        })(),
         questions: fullDetails.questions || [], // Structured question objects
         has_questions: fullDetails.questions && fullDetails.questions.length > 0,
-        type: paper.type, // Pass through the type
-        template: {
-          template_name: fullDetails.template_name,
-          institute_name: fullDetails.institute_name,
-          course_name: fullDetails.course_name,
-          course_code: fullDetails.course_code,
-          duration_minutes: fullDetails.duration_minutes,
-          exam_date: fullDetails.exam_date,
-          exam_time: fullDetails.exam_time,
-          sections: fullDetails.sections || []
-        }
+        type: 'existing', // All papers are now from the same source
+        template: templateDetails ? {
+          template_name: templateDetails.templateName || templateDetails.template_name || templateDetails.name,
+          institute_name: templateDetails.instituteName || templateDetails.institute_name,
+          duration_minutes: templateDetails.duration || templateDetails.duration_minutes,
+          exam_date: templateDetails.examDate || templateDetails.exam_date,
+          exam_time: formatExamTime(templateDetails.examTime || templateDetails.exam_time),
+          sections: templateDetails.sections || []
+        } : {}
       };
+        
+      console.log('Formatted paper for preview with complete template details:', formattedPaper);
+      setPreviewQuestionPaper(formattedPaper);
+      setShowPreview(true);
 
       console.log('Formatted paper for preview with complete template details:', formattedPaper);
       setPreviewQuestionPaper(formattedPaper);
@@ -668,61 +576,26 @@ const QuestionGeneration = () => {
       setLoading(true);
       // Authentication removed
 
-      if (previewQuestionPaper.type === 'generated') {
-        // For generated papers, use the new update endpoint
-        const response = await fetch(getApiUrl(`/api/generated-papers/${previewQuestionPaper.id}/questions`), {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedQuestions)
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to save edited questions to database');
-        }
-
-        console.log('Successfully saved edited questions to database');
-        
-        // Update the preview immediately
-        setPreviewQuestionPaper({
-          ...previewQuestionPaper,
-          questions: updatedQuestions,
-          updated_at: new Date().toISOString()
-        });
-
-        // Update the question paper in the local list
-        const updatedPapers = questionPapers.map(paper => 
-          paper.id === previewQuestionPaper.id 
-            ? { ...paper, questions: updatedQuestions, updated_at: new Date().toISOString() }
-            : paper
-        );
-        setQuestionPapers(updatedPapers);
-        
-      } else {
-        // Update questions in backend for regular papers
-        await questionPaperService.updateQuestionPaperQuestions(
-          previewQuestionPaper.id, 
-          updatedQuestions, 
-          token
-        );
-        
-        // Update the question paper in the local list
-        const updatedPapers = questionPapers.map(paper => 
-          paper.id === previewQuestionPaper.id 
-            ? { ...paper, questions: updatedQuestions, updated_at: new Date().toISOString() }
-            : paper
-        );
-        setQuestionPapers(updatedPapers);
-        
-        // Update the preview
-        setPreviewQuestionPaper({
-          ...previewQuestionPaper,
-          questions: updatedQuestions,
-          updated_at: new Date().toISOString()
-        });
-      }
+      // Update questions in backend using the service
+      await questionPaperService.updateQuestionPaperQuestions(
+        previewQuestionPaper.id, 
+        updatedQuestions
+      );
+      
+      // Update the preview immediately
+      setPreviewQuestionPaper({
+        ...previewQuestionPaper,
+        questions: updatedQuestions,
+        updated_at: new Date().toISOString()
+      });
+      
+      // Update the question paper in the local list
+      const updatedPapers = questionPapers.map(paper => 
+        paper.id === previewQuestionPaper.id 
+          ? { ...paper, questions: updatedQuestions, updated_at: new Date().toISOString() }
+          : paper
+      );
+      setQuestionPapers(updatedPapers);
       
       console.log('Successfully saved edited questions');
       
@@ -771,45 +644,49 @@ const QuestionGeneration = () => {
     }
   };
 
-  // Add delete question paper handler
-  const handleDeleteQuestionPaper = async (paperId: string, paperType: string) => {
-    if (!confirm('Are you sure you want to delete this question paper? This action cannot be undone.')) {
-      return;
-    }
+  // Show delete confirmation modal
+  const showDeleteConfirmation = (id: string, type: 'paper' | 'template', name: string) => {
+    setDeleteTarget({ id, type, name });
+    setShowDeleteModal(true);
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
 
     try {
       setLoading(true);
       setError(null);
       
-      // Authentication removed
-      
-      if (paperType === 'generated') {
-        // Delete generated paper
-        const response = await fetch(getApiUrl(`/api/generated-papers/${paperId}`), {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Failed to delete generated question paper');
-        }
+      if (deleteTarget.type === 'paper') {
+        // Delete question paper using the service
+        await questionPaperService.deleteQuestionPaper(deleteTarget.id);
+        // Remove from local state
+        setQuestionPapers(questionPapers.filter(paper => paper.id !== deleteTarget.id));
+        console.log(`Successfully deleted question paper:`, deleteTarget.id);
       } else {
-        // Delete existing paper using existing service
-        await questionPaperService.deleteQuestionPaper(paperId);
+        // Delete template
+        await templateService.deleteTemplate(deleteTarget.id);
+        setGeneratedTemplates(generatedTemplates.filter(t => t.id !== deleteTarget.id));
+        console.log(`Successfully deleted template:`, deleteTarget.id);
       }
-
-      // Remove from local state
-      setQuestionPapers(questionPapers.filter(paper => paper.id !== paperId));
       
-      console.log(`Successfully deleted ${paperType} question paper:`, paperId);
+      // Close modal
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
       
     } catch (err) {
-      console.error('Error deleting question paper:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete question paper');
+      console.error('Error deleting:', err);
+      setError(err instanceof Error ? err.message : `Failed to delete ${deleteTarget.type}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Cancel delete
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   // Show QuestionPaper component if in generation mode
@@ -962,7 +839,11 @@ const QuestionGeneration = () => {
                           </div>
                           <div className="col-span-2">
                             <span className="text-sm text-gray-500">
-                              {new Date(paper.created_at).toLocaleDateString()}
+                              {(() => {
+                                if (!paper.created_at) return 'N/A';
+                                const date = new Date(paper.created_at);
+                                return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+                              })()}
                             </span>
                           </div>
                           <div className="col-span-2">
@@ -978,7 +859,7 @@ const QuestionGeneration = () => {
                                 </button>
                               )}
                               <button
-                                onClick={() => handleDeleteQuestionPaper(paper.id, paper.type)}
+                                onClick={() => showDeleteConfirmation(paper.id, 'paper', paper.name || 'this question paper')}
                                 disabled={loading}
                                 className="p-2 text-red-600 hover:bg-red-50 rounded-md disabled:opacity-50"
                                 title="Delete Question Paper"
@@ -1029,7 +910,7 @@ const QuestionGeneration = () => {
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <div className="px-6 py-4 border-b border-gray-200">
                   <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500">
-                    <div className="col-span-1">SL</div>
+                    <div className="col-span-1">S.No</div>
                     <div className="col-span-7">Name</div>
                     <div className="col-span-4">Last Modified</div>
                   </div>
@@ -1171,32 +1052,6 @@ const QuestionGeneration = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Course Name<span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="courseName"
-                      value={templateData.courseName}
-                      onChange={handleTemplateInputChange}
-                      placeholder="Eg: Computer Science"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Course Code<span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="courseCode"
-                      value={templateData.courseCode}
-                      onChange={handleTemplateInputChange}
-                      placeholder="Eg: CS101"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
                 </div>
 
                 {/* Duration, Date and Time Row */}
@@ -1267,131 +1122,49 @@ const QuestionGeneration = () => {
                   </div>
                 </div>
 
-                {/* Sections */}
-                {templateData.sections.map((section, index) => (
-                  <div key={`section-${section.id}-${index}`} className="mb-8 p-6 bg-gray-50 rounded-lg border">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-medium text-gray-900">Section {section.id}</h3>
-                      <div className="flex items-center space-x-3">
-                        {section.totalQuestions && section.marksPerQuestion && (
-                          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
-                            Total: {calculateTotalMarks(section)} marks
-                          </span>
-                        )}
-                        <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                          Section #{section.id}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Section Name<span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={section.sectionName}
-                          onChange={(e) => handleSectionInputChange(index, 'sectionName', e.target.value)}
-                          placeholder="Eg: Section 1, Part A"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Section Type<span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={section.sectionType}
-                          onChange={(e) => handleSectionInputChange(index, 'sectionType', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="Answer All Questions">Answer All Questions</option>
-                          <option value="Choose Any">Choose Any</option>
-                          <option value="Optional">Optional</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Questions Type<span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={section.questionsType}
-                          onChange={(e) => handleSectionInputChange(index, 'questionsType', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="Select Question Type">Select Question Type</option>
-                          <option value="Multiple Choice">Multiple Choice</option>
-                          <option value="Short Answer">Short Answer</option>
-                          <option value="Essay">Essay</option>
-                          <option value="Fill in the Blank">Fill in the Blank</option>
-                          <option value="True/False">True/False</option>
-                          <option value="One Word">One Word</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Total Questions<span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          value={section.totalQuestions}
-                          onChange={(e) => handleSectionInputChange(index, 'totalQuestions', e.target.value)}
-                          placeholder="Enter number of questions"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      
-                      {(section.sectionType === 'Choose Any' || section.sectionType === 'Optional') && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Questions to be Answered<span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            value={section.questionsToAnswer}
-                            onChange={(e) => handleSectionInputChange(index, 'questionsToAnswer', e.target.value)}
-                            placeholder="How many to answer"
-                            max={section.totalQuestions}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                      )}
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Marks for Each Question<span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          value={section.marksPerQuestion}
-                          onChange={(e) => handleSectionInputChange(index, 'marksPerQuestion', e.target.value)}
-                          placeholder="Enter marks per question"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Custom Instruction
-                      </label>
-                      <textarea
-                        value={section.customInstruction}
-                        onChange={(e) => handleSectionInputChange(index, 'customInstruction', e.target.value)}
-                        placeholder="Enter any custom instructions for this section"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows={3}
-                      />
-                    </div>
+                {/* Total Questions and Total Marks */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Total Questions<span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="totalQuestions"
+                      value={templateData.totalQuestions}
+                      onChange={handleTemplateInputChange}
+                      placeholder="Eg: 75"
+                      min="1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Total number of questions in the paper (e.g., 75 for JEE Mains)</p>
                   </div>
-                ))}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Total Marks<span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      name="totalMarks"
+                      value={templateData.totalMarks}
+                      onChange={handleTemplateInputChange}
+                      placeholder="Eg: 300"
+                      min="1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Total marks for the paper (e.g., 300 for JEE Mains)</p>
+                  </div>
+                </div>
 
-                {/* Add Section Button */}
-                <div className="mb-6">
+                {/* Sections - Commented out for now */}
+                {/* {templateData.sections.map((section, index) => (
+                  <div key={`section-${section.id}-${index}`} className="mb-8 p-6 bg-gray-50 rounded-lg border">
+                    ... section form fields ...
+                  </div>
+                ))} */}
+
+                {/* Add Section Button - Commented out for now */}
+                {/* <div className="mb-6">
                   <button
                     type="button"
                     onClick={addSection}
@@ -1400,7 +1173,7 @@ const QuestionGeneration = () => {
                     <Plus className="h-4 w-4" />
                     <span>Add Section</span>
                   </button>
-                </div>
+                </div> */}
 
                 {/* Actions */}
                 <div className="flex justify-end space-x-4">
@@ -1414,21 +1187,21 @@ const QuestionGeneration = () => {
                       setTemplateData({
                         templateName: '',
                         instituteName: '',
-                        courseName: '',
-                        courseCode: '',
                         duration: '',
                         examDate: '',
                         examTime: { hour: '', minute: '', period: 'AM' },
-                        sections: [{
-                          id: 1,
-                          sectionName: '',
-                          sectionType: 'Answer All Questions',
-                          questionsType: 'Select Question Type',
-                          totalQuestions: '',
-                          questionsToAnswer: '',
-                          marksPerQuestion: '',
-                          customInstruction: ''
-                        }]
+                        totalQuestions: '75',
+                        totalMarks: '300',
+                        // sections: [{  // Commented out for now
+                        //   id: 1,
+                        //   sectionName: '',
+                        //   sectionType: 'Answer All Questions',
+                        //   questionsType: 'Select Question Type',
+                        //   totalQuestions: '',
+                        //   questionsToAnswer: '',
+                        //   marksPerQuestion: '',
+                        //   customInstruction: ''
+                        // }]
                       });
                     }}
                     className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -1455,7 +1228,6 @@ const QuestionGeneration = () => {
       {showPreview && previewQuestionPaper && (
         <QuestionPaperPreview
           questionPaper={previewQuestionPaper}
-          isOpen={showPreview}
           onClose={() => setShowPreview(false)}
           onSave={handleSaveQuestionEdits}
         />
@@ -1471,7 +1243,7 @@ const QuestionGeneration = () => {
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Template Preview</h2>
-                  <p className="text-sm text-gray-500">{previewTemplate.name}</p>
+                  <p className="text-sm text-gray-500">{previewTemplate.templateName || previewTemplate.template_name || previewTemplate.name}</p>
                 </div>
                 <button
                   onClick={() => setShowTemplatePreview(false)}
@@ -1488,32 +1260,33 @@ const QuestionGeneration = () => {
                   {/* Question Paper Header */}
                   <div className="text-center mb-8 border-b border-gray-300 pb-6">
                     <h3 className="text-xl font-bold text-gray-900 mb-3">
-                      {previewTemplate.institute_name || 'Institute Name'}
+                      {previewTemplate.instituteName || previewTemplate.institute_name || 'Institute Name'}
                     </h3>
                     <p className="text-gray-700 mb-1">
-                      {previewTemplate.template_name || previewTemplate.name}
+                      {previewTemplate.templateName || previewTemplate.template_name || previewTemplate.name}
                     </p>
-                    <p className="text-gray-700 mb-1">
-                      Internal Examination {previewTemplate.exam_date ? 
-                        new Date(previewTemplate.exam_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 
+                    {/* Removed "Internal Examination" line */}
+                    {/* <p className="text-gray-700 mb-1">
+                      Internal Examination {(previewTemplate.examDate || previewTemplate.exam_date) ? 
+                        new Date(previewTemplate.examDate || previewTemplate.exam_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 
                         'August, 2025'}
-                    </p>
-                    <p className="text-gray-700 mb-4">
-                      {previewTemplate.course_code ? 
-                        `${previewTemplate.course_name} (${previewTemplate.course_code})` : 
-                        previewTemplate.course_name || previewTemplate.name}
-                    </p>
+                    </p> */}
                     
                     <div className="flex justify-between items-center text-sm font-medium max-w-md mx-auto">
-                      <span>Max Mark: {calculateTotalMarks({ sections: previewTemplate.sections })}</span>
-                      <span>Duration: {previewTemplate.duration_minutes || previewTemplate.duration?.replace(' Minutes', '') || '0'} Minutes</span>
+                      <span>Total Marks: {calculateTotalMarks({ sections: previewTemplate.sections })}</span>
+                      <span>Duration: {previewTemplate.duration || previewTemplate.duration_minutes || '0'} Minutes</span>
                     </div>
                     
-                    {previewTemplate.exam_date && previewTemplate.exam_time && (
+                    {(previewTemplate.examDate || previewTemplate.exam_date) && (previewTemplate.examTime || previewTemplate.exam_time) && (
                       <div className="mt-2 text-sm text-gray-600">
-                        <span>Date: {new Date(previewTemplate.exam_date).toLocaleDateString('en-GB')}</span>
+                        <span>Date: {(() => {
+                          const dateStr = previewTemplate.examDate || previewTemplate.exam_date;
+                          if (!dateStr) return 'N/A';
+                          const date = new Date(dateStr);
+                          return isNaN(date.getTime()) ? dateStr : date.toLocaleDateString('en-GB');
+                        })()}</span>
                         <span className="mx-2">•</span>
-                        <span>Time: {formatExamTime(previewTemplate.exam_time)}</span>
+                        <span>Time: {formatExamTime(previewTemplate.examTime || previewTemplate.exam_time)}</span>
                       </div>
                     )}
                   </div>
@@ -1525,67 +1298,85 @@ const QuestionGeneration = () => {
                         <div key={index}>
                           <div className="text-center mb-4">
                             <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                              {section.section_name || `Section ${index + 1}`}
+                              {section.sectionName || section.section_name || `Section ${index + 1}`}
                             </h4>
                             <div className="text-sm text-gray-600 mb-2">
-                              {section.section_type === 'Answer All Questions' ? (
-                                <p>Answer all {section.total_questions} questions.</p>
-                              ) : section.section_type === 'Choose Any' ? (
-                                <p>Answer any {section.questions_to_answer} questions out of {section.total_questions}.</p>
-                              ) : section.section_type === 'Optional' ? (
-                                <p>This section is optional. Answer any {section.questions_to_answer} questions out of {section.total_questions}.</p>
-                              ) : (
-                                <p>Answer any {Math.min(section.total_questions || 5, 5)} Questions.</p>
-                              )}
+                              {(() => {
+                                const sectionType = section.sectionType || section.section_type;
+                                const totalQuestions = section.totalQuestions || section.total_questions || 0;
+                                const questionsToAnswer = section.questionsToAnswer || section.questions_to_answer || totalQuestions;
+                                
+                                if (sectionType === 'Answer All Questions') {
+                                  return <p>Answer all {totalQuestions} questions.</p>;
+                                } else if (sectionType === 'Choose Any') {
+                                  return <p>Answer any {questionsToAnswer} questions out of {totalQuestions}.</p>;
+                                } else if (sectionType === 'Optional') {
+                                  return <p>This section is optional. Answer any {questionsToAnswer} questions out of {totalQuestions}.</p>;
+                                } else {
+                                  return <p>Answer any {Math.min(totalQuestions || 5, 5)} Questions.</p>;
+                                }
+                              })()}
                             </div>
                             <p className="text-sm text-gray-600">
-                              Each question carries {section.marks_per_question} mark{section.marks_per_question > 1 ? 's' : ''}.
+                              Each question carries {section.marksPerQuestion || section.marks_per_question || 0} mark{(section.marksPerQuestion || section.marks_per_question || 0) > 1 ? 's' : ''}.
                             </p>
                           </div>
                           
                           {/* Sample Questions */}
-                          <div className="space-y-4">
-                            {Array.from({ length: section.total_questions || 0 }, (_, qIndex) => (
+                          {/* <div className="space-y-4">
+                            {Array.from({ length: section.totalQuestions || section.total_questions || 0 }, (_, qIndex) => (
                               <div key={qIndex} className="flex">
                                 <span className="mr-4 font-medium text-gray-900 flex-shrink-0">{qIndex + 1})</span>
                                 <div className="flex-1 min-w-0">
-                                  {section.question_type === 'Multiple Choice' ? (
-                                    <div>
-                                      <p className="text-gray-900 mb-2 break-words">Sample multiple choice question for {section.question_type}?</p>
-                                      <div className="ml-4 space-y-1 text-sm text-gray-700">
-                                        <p>a) Option A</p>
-                                        <p>b) Option B</p>
-                                        <p>c) Option C</p>
-                                        <p>d) Option D</p>
-                                      </div>
-                                    </div>
-                                  ) : section.question_type === 'True/False' ? (
-                                    <p className="text-gray-900 break-words">Sample statement for true/false evaluation. (True/False)</p>
-                                  ) : section.question_type === 'One Word' ? (
-                                    <p className="text-gray-900 break-words">Fill in the blank: _____ is the capital of India.</p>
-                                  ) : section.question_type === 'Short Answer' ? (
-                                    <p className="text-gray-900 break-words">Explain the concept in 2-3 sentences.</p>
-                                  ) : section.question_type === 'Essay' ? (
-                                    <p className="text-gray-900 break-words">Write a detailed essay on the given topic (200-300 words).</p>
-                                  ) : section.question_type === 'Fill in the Blank' ? (
-                                    <p className="text-gray-900 break-words">Complete the sentence: The process of _____ is essential for _____.</p>
-                                  ) : (
-                                    <p className="text-gray-900 break-words">Sample {(section.question_type || 'general').toLowerCase()} question.</p>
-                                  )}
+                                  {(() => {
+                                    const questionType = section.questionType || section.question_type || 'Multiple Choice';
+                                    if (questionType === 'Multiple Choice') {
+                                      return (
+                                        <div>
+                                          <p className="text-gray-900 mb-2 break-words">Sample multiple choice question for {questionType}?</p>
+                                          <div className="ml-4 space-y-1 text-sm text-gray-700">
+                                            <p>a) Option A</p>
+                                            <p>b) Option B</p>
+                                            <p>c) Option C</p>
+                                            <p>d) Option D</p>
+                                          </div>
+                                        </div>
+                                      );
+                                    } else if (questionType === 'True/False') {
+                                      return <p className="text-gray-900 break-words">Sample statement for true/false evaluation. (True/False)</p>;
+                                    } else if (questionType === 'One Word') {
+                                      return <p className="text-gray-900 break-words">Fill in the blank: _____ is the capital of India.</p>;
+                                    } else if (questionType === 'Short Answer') {
+                                      return <p className="text-gray-900 break-words">Explain the concept in 2-3 sentences.</p>;
+                                    } else if (questionType === 'Essay') {
+                                      return <p className="text-gray-900 break-words">Write a detailed essay on the given topic (200-300 words).</p>;
+                                    } else if (questionType === 'Fill in the Blank') {
+                                      return <p className="text-gray-900 break-words">Complete the sentence: The process of _____ is essential for _____.</p>;
+                                    } else {
+                                      return <p className="text-gray-900 break-words">Sample {questionType.toLowerCase()} question.</p>;
+                                    }
+                                  })()}
                                 </div>
                               </div>
                             ))}
-                          </div>
+                          </div> */}
                           
                           {/* Section Summary */}
                           <div className="mt-4 p-3 bg-gray-100 rounded-md text-sm text-gray-600">
                             <div className="flex justify-between items-center">
                               <span>Section Total:</span>
                               <span className="font-medium">
-                                {section.section_type === 'Answer All Questions' 
-                                  ? section.total_questions * section.marks_per_question
-                                  : section.questions_to_answer * section.marks_per_question
-                                } marks
+                                {(() => {
+                                  const sectionType = section.sectionType || section.section_type;
+                                  const totalQuestions = section.totalQuestions || section.total_questions || 0;
+                                  const questionsToAnswer = section.questionsToAnswer || section.questions_to_answer || totalQuestions;
+                                  const marksPerQuestion = section.marksPerQuestion || section.marks_per_question || 0;
+                                  const totalMarks = section.totalMarks || (sectionType === 'Answer All Questions' 
+                                    ? totalQuestions * marksPerQuestion
+                                    : questionsToAnswer * marksPerQuestion
+                                  );
+                                  return `${totalMarks} marks`;
+                                })()}
                               </span>
                             </div>
                           </div>
@@ -1602,11 +1393,61 @@ const QuestionGeneration = () => {
                   <div className="mt-8 pt-6 border-t border-gray-300 text-center text-sm text-gray-500">
                     <p>--- End of Question Paper ---</p>
                     <p className="mt-2">
-                      Total Duration: {previewTemplate.duration_minutes || previewTemplate.duration?.replace(' Minutes', '') || '0'} Minutes | 
+                      Total Duration: {previewTemplate.duration || previewTemplate.duration_minutes || '0'} Minutes | 
                       Total Marks: {calculateTotalMarks({ sections: previewTemplate.sections })}
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 transform transition-all">
+            <div className="p-6">
+              {/* Icon */}
+              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              
+              {/* Title */}
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete {deleteTarget.type === 'paper' ? 'Question Paper' : 'Template'}?
+              </h3>
+              
+              {/* Message */}
+              <p className="text-sm text-gray-600 text-center mb-6">
+                Are you sure you want to delete <span className="font-medium text-gray-900">"{deleteTarget.name}"</span>? 
+                This action cannot be undone.
+              </p>
+              
+              {/* Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
               </div>
             </div>
           </div>

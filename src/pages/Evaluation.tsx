@@ -15,7 +15,7 @@ import {
   FileText,
   BookOpen
 } from 'lucide-react';
-import type { KeySheet, KeyMetadata } from '../lib/supabase';
+import type { KeySheet, KeyMetadata } from '../types';
 
 interface UploadedFile {
   id: string;

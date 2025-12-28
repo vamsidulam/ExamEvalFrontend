@@ -1,4 +1,9 @@
-import { API_BASE_URL, getApiUrl } from '../config/api';
+/**
+ * Question Paper Service - Backend Integration
+ * Connects to FastAPI backend for question paper management.
+ */
+
+import { getApiUrl } from '../config/api';
 
 export interface BTLLevel {
   btl_level_name: string;
@@ -13,184 +18,281 @@ export interface QuestionPaperCreate {
 }
 
 export interface GenerateQuestionsRequest {
-  question_paper_id: string;
+  templateId: string;
+  templateName: string;
+  syllabus: string;
+  additionalInstructions?: string;
+  numQuestions: number;
+  level?: string;
 }
 
 export interface QuestionPaper {
   id: string;
-  user_id: string;
-  template_id: string;
+  userId: string;
+  templateId: string;
+  templateName: string;
   name: string;
-  syllabus: string;
-  additional_instructions?: string;
-  created_at: string;
-  updated_at: string;
-  btl_levels: string[];
   questions: any[];
-  has_questions: boolean;
+  totalMarks: number;
+  createdAt: string;
+  updatedAt?: string;
+  // Legacy fields for compatibility
+  user_id?: string;
+  template_id?: string;
+  syllabus?: string;
+  additional_instructions?: string;
+  created_at?: string;
+  updated_at?: string;
+  btl_levels?: string[];
+  has_questions?: boolean;
 }
 
 export interface GenerationResult {
   success: boolean;
+  id: string;
   question_paper_id: string;
   questions: Array<{
+    question_number: number;
     section_number: number;
     section_name: string;
-    content: string;
-    raw_content: string;
+    question_text: string;
+    question_type: string;
+    marks: number;
   }>;
   template_name: string;
 }
 
+/**
+ * Get authentication token from localStorage
+ */
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('authToken');
+};
+
+/**
+ * Get headers with authentication
+ */
+const getHeaders = (): HeadersInit => {
+  const token = getAuthToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return headers;
+};
+
+/**
+ * Get headers for file upload with authentication
+ */
+const getFormHeaders = (): HeadersInit => {
+  const token = getAuthToken();
+  const headers: HeadersInit = {};
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return headers;
+};
+
 class QuestionPaperService {
-  private async request(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<any> {
-    const url = `${API_BASE_URL}${endpoint}`;
+  // Analyze syllabus from file or text
+  async analyzeSyllabus(
+    file?: File,
+    text?: string,
+    additionalInstructions?: string
+  ): Promise<{ analyzed_syllabus: string; syllabus_length: number }> {
+    const formData = new FormData();
     
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((options.headers as Record<string, string>) || {}),
-    };
-
-    const config: RequestInit = {
-      ...options,
-      headers,
-    };
-
-    console.log(`[QuestionPaperService] ${options.method || 'GET'} ${url}`);
-    
-    try {
-      const response = await fetch(url, config);
-      
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error(`[QuestionPaperService] Error ${response.status}:`, errorData);
-        throw new Error(`HTTP ${response.status}: ${errorData}`);
-      }
-
-      const data = await response.json();
-      console.log(`[QuestionPaperService] Success:`, data);
-      return data;
-    } catch (error) {
-      console.error(`[QuestionPaperService] Request failed:`, error);
-      throw error;
+    if (file) {
+      formData.append('file', file);
     }
+    if (text) {
+      formData.append('text', text);
+    }
+    if (additionalInstructions) {
+      formData.append('additional_instructions', additionalInstructions);
+    }
+    
+    const response = await fetch(getApiUrl('/api/question-papers/analyze-syllabus'), {
+      method: 'POST',
+      headers: getFormHeaders(),
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to analyze syllabus' }));
+      throw new Error(error.detail || 'Failed to analyze syllabus');
+    }
+
+    return await response.json();
   }
 
-  // Create a new question paper
-  async createQuestionPaper(questionPaperData: QuestionPaperCreate): Promise<{ id: string; message: string }> {
-    return this.request('/api/question-papers', {
+  // Upload syllabus file (legacy method - now uses analyzeSyllabus)
+  async uploadSyllabus(file: File): Promise<{ syllabus: string; filename: string }> {
+    const result = await this.analyzeSyllabus(file);
+    return {
+      syllabus: result.analyzed_syllabus,
+      filename: file.name
+    };
+  }
+
+  // Generate questions and create question paper
+  async generateQuestions(request: GenerateQuestionsRequest): Promise<GenerationResult> {
+    const response = await fetch(getApiUrl('/api/question-papers/generate'), {
       method: 'POST',
-      body: JSON.stringify(questionPaperData),
+      headers: getHeaders(),
+      body: JSON.stringify({
+        templateId: request.templateId,
+        templateName: request.templateName,
+        syllabus: request.syllabus,
+        additionalInstructions: request.additionalInstructions || '',
+        numQuestions: request.numQuestions,
+        level: request.level || 'hard'
+      }),
     });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to generate questions' }));
+      const errorMessage = error.detail || error.message || JSON.stringify(error);
+      throw new Error(`Question generation failed: ${errorMessage}`);
+    }
+
+    const data = await response.json();
+    
+    return {
+      success: true,
+      id: data.id,
+      question_paper_id: data.id,
+      questions: data.questions.map((q: any) => ({
+        question_number: q.question_number,
+        section_number: q.section_number,
+        section_name: q.section_name,
+        question_text: q.question_text,
+        question_type: q.question_type,
+        marks: q.marks
+      })),
+      template_name: data.templateName
+    };
+  }
+
+  // Create a new question paper (legacy - now handled by generateQuestions)
+  async createQuestionPaper(questionPaperData: QuestionPaperCreate): Promise<{ id: string; message: string }> {
+    // This is now handled by generateQuestions
+    throw new Error('Use generateQuestions instead of createQuestionPaper');
   }
 
   // Get all question papers for user
   async getQuestionPapers(): Promise<{ question_papers: QuestionPaper[] }> {
-    return this.request('/api/question-papers', {
+    const response = await fetch(getApiUrl('/api/question-papers'), {
       method: 'GET',
+      headers: getHeaders(),
     });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to fetch question papers' }));
+      throw new Error(error.detail || 'Failed to fetch question papers');
+    }
+
+    const data = await response.json();
+    return {
+      question_papers: data.map((qp: any) => ({
+        ...qp,
+        // Legacy compatibility
+        user_id: qp.userId,
+        template_id: qp.templateId,
+        created_at: qp.createdAt,
+        updated_at: qp.updatedAt,
+        has_questions: qp.questions && qp.questions.length > 0
+      }))
+    };
   }
 
   // Get a specific question paper
   async getQuestionPaper(questionPaperId: string): Promise<QuestionPaper> {
-    return this.request(`/api/question-papers/${questionPaperId}`, {
+    const response = await fetch(getApiUrl(`/api/question-papers/${questionPaperId}`), {
       method: 'GET',
+      headers: getHeaders(),
     });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Question paper not found' }));
+      throw new Error(error.detail || 'Question paper not found');
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      // Legacy compatibility
+      user_id: data.userId,
+      template_id: data.templateId,
+      created_at: data.createdAt,
+      updated_at: data.updatedAt,
+      has_questions: data.questions && data.questions.length > 0
+    };
   }
 
   // Get just the questions for a question paper
   async getQuestionPaperQuestions(questionPaperId: string): Promise<{ questions: any[]; questions_count: number }> {
-    return this.request(`/api/question-papers/${questionPaperId}/questions`, {
-      method: 'GET',
-    });
-  }
-
-  // Generate questions for a question paper
-  async generateQuestions(request: GenerateQuestionsRequest): Promise<GenerationResult> {
-    return this.request('/api/question-papers/generate', {
-      method: 'POST',
-      body: JSON.stringify(request),
-    });
-  }
-
-  // Upload syllabus file
-  async uploadSyllabus(file: File): Promise<{ syllabus: string; filename: string }> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const url = `${API_BASE_URL}/api/syllabus/upload`;
-    
-    console.log(`[QuestionPaperService] POST ${url} - Uploading file:`, file.name);
-    
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error(`[QuestionPaperService] Upload Error ${response.status}:`, errorData);
-        throw new Error(`HTTP ${response.status}: ${errorData}`);
-      }
-
-      const data = await response.json();
-      console.log(`[QuestionPaperService] Upload Success:`, data);
-      return data;
-    } catch (error) {
-      console.error(`[QuestionPaperService] Upload failed:`, error);
-      throw error;
-    }
+    const paper = await this.getQuestionPaper(questionPaperId);
+    return {
+      questions: paper.questions || [],
+      questions_count: paper.questions?.length || 0
+    };
   }
 
   // Delete a question paper
   async deleteQuestionPaper(questionPaperId: string): Promise<{ message: string }> {
-    return this.request(`/api/question-papers/${questionPaperId}`, {
+    const response = await fetch(getApiUrl(`/api/question-papers/${questionPaperId}`), {
       method: 'DELETE',
+      headers: getHeaders(),
     });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to delete question paper' }));
+      throw new Error(error.detail || 'Failed to delete question paper');
+    }
+
+    return { message: 'Question paper deleted successfully' };
   }
 
   // Get a specific question paper with full details including template
   async getQuestionPaperDetails(questionPaperId: string): Promise<any> {
-    return this.request(`/api/question-papers/${questionPaperId}`, {
-      method: 'GET',
-    });
+    return await this.getQuestionPaper(questionPaperId);
   }
 
   // Add method to get question paper details with automatic routing
   async getQuestionPaperDetailsWithRouting(paperId: string, paperType: string) {
-    if (paperType === 'generated') {
-      // Use generated papers endpoint
-      const response = await fetch(getApiUrl(`/api/generated-papers/${paperId}`), {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${response.status}: Failed to fetch generated paper`);
-      }
-      
-      return await response.json();
-    } else {
-      // Use existing question papers endpoint
-      return await questionPaperService.getQuestionPaperDetails(paperId);
-    }
+    return await this.getQuestionPaper(paperId);
   }
 
   // Update questions for a question paper (for editing)
   async updateQuestionPaperQuestions(questionPaperId: string, questions: any[]): Promise<any> {
-    return this.request(`/api/question-papers/${questionPaperId}/questions`, {
+    const response = await fetch(getApiUrl(`/api/question-papers/${questionPaperId}`), {
       method: 'PUT',
+      headers: getHeaders(),
       body: JSON.stringify({ questions }),
     });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to update questions' }));
+      throw new Error(error.detail || 'Failed to update questions');
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      // Legacy compatibility
+      user_id: data.userId,
+      template_id: data.templateId,
+      created_at: data.createdAt,
+      updated_at: data.updatedAt,
+      has_questions: data.questions && data.questions.length > 0
+    };
   }
 
   // Utility method to format BTL levels for API
@@ -216,10 +318,6 @@ class QuestionPaperService {
     
     if (!data.syllabus || data.syllabus.trim().length < 10) {
       errors.push('Syllabus content is required (minimum 10 characters)');
-    }
-    
-    if (!data.btl_levels || data.btl_levels.length === 0) {
-      errors.push('At least one BTL level must be selected');
     }
     
     return errors;

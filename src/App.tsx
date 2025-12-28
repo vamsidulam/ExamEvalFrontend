@@ -1,5 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import SignUpPage from './pages/SignUpPage';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import ClassDashboard from './components/ClassDashboardClean';
@@ -34,13 +36,14 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
             
             {/* Student Routes */}
             <Route path="/student-dashboard" element={<StudentDashboard />} />
             
-            {/* Redirect auth routes (authentication disabled) */}
-            <Route path="/sign-up" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            {/* Legacy route redirect */}
+            <Route path="/sign-up" element={<Navigate to="/signup" replace />} />
             
             {/* Dashboard Routes - Now Public */}
             <Route path="/dashboard/*" element={

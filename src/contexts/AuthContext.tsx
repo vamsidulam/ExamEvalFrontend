@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authService } from '../services/authService';
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
+  createdAt?: string;
 }
 
 interface AuthContextType {
@@ -14,6 +15,7 @@ interface AuthContextType {
   setSidebarCollapsed: (collapsed: boolean) => void;
   logout: () => void;
   loading: boolean;
+  setUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,19 +30,37 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Create a default user since authentication is removed
-  const [user] = useState<User>({
-    id: 'default-user',
-    name: 'User',
-    email: 'user@example.com',
-    role: 'User'
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Check sidebar state from localStorage
     const savedSidebarState = localStorage.getItem('sidebarCollapsed');
     if (savedSidebarState) {
       setSidebarCollapsed(JSON.parse(savedSidebarState));
+    }
+
+    // Check for existing authentication
+    const token = authService.getToken();
+    const savedUser = authService.getUser();
+    
+    if (token && savedUser) {
+      setUser(savedUser);
+      // Optionally verify token is still valid
+      authService.getCurrentUser()
+        .then((userData) => {
+          setUser(userData);
+        })
+        .catch(() => {
+          // Token invalid, clear auth
+          authService.logout();
+          setUser(null);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
     }
   }, []);
 
@@ -50,17 +70,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    // No-op since authentication is removed
-    console.log('Logout called (authentication disabled)');
+    authService.logout();
+    setUser(null);
+    window.location.href = '/login';
   };
 
   const value = {
     user,
-    isAuthenticated: true, // Always authenticated since auth is removed
+    isAuthenticated: !!user,
     sidebarCollapsed,
     setSidebarCollapsed: handleSetSidebarCollapsed,
     logout,
-    loading: false
+    loading,
+    setUser
   };
 
   return (

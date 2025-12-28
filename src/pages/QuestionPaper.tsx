@@ -112,18 +112,12 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
   const handleNextStep = async () => {
     if (currentGenerationStep === 2) {
       // Validate step 2 before proceeding
-      const selectedBTLs = Object.values(questionData.btlLevels).filter(level => level.enabled);
-      if (selectedBTLs.length === 0) {
-        setError('Please select at least one BTL level');
-        return;
-      }
       if (!questionData.syllabus.trim()) {
         setError('Please provide syllabus content');
         return;
       }
       
-      // Create question paper when moving to step 3
-      await createQuestionPaper();
+      // No need to create question paper separately - it will be created during generation
     }
     
     if (currentGenerationStep < 3) {
@@ -190,8 +184,13 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
   };
 
   const handleGenerateQuestions = async () => {
-    if (!createdQuestionPaperId) {
-      setError('No question paper created. Please go back and try again.');
+    if (!selectedTemplate) {
+      setError('Please select a template');
+      return;
+    }
+
+    if (!questionData.syllabus.trim()) {
+      setError('Please provide syllabus content');
       return;
     }
 
@@ -199,62 +198,72 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
       setIsGeneratingQuestions(true);
       setError(null);
       
-      // Authentication removed
+      // Get total questions from template (new structure)
+      const totalQuestions = selectedTemplate.totalQuestions || selectedTemplate.total_questions || 75;
 
-      // Use the centralized API config
-      const response = await fetch(getApiUrl('/api/generate-questions'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          template_id: selectedTemplate.id,
-          topic: questionData.syllabus.substring(0, 200), // Use syllabus as topic
-          difficulty_level: 'medium'
-        })
+      // Generate questions using the new API
+      const result = await questionPaperService.generateQuestions({
+        templateId: selectedTemplate.id,
+        templateName: selectedTemplate.templateName || selectedTemplate.template_name || selectedTemplate.name,
+        syllabus: questionData.syllabus,
+        additionalInstructions: questionData.additionalInstructions || '',
+        numQuestions: totalQuestions,
+        level: 'hard'
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${response.status}: Failed to generate questions`);
-      }
-
-      const result = await response.json();
-      setGenerationResult(result);
+      // Format result for compatibility
+      const formattedResult = {
+        success: result.success,
+        id: result.id,
+        question_paper_id: result.question_paper_id,
+        questions: result.questions.map((q: any) => ({
+          section_number: q.section_number,
+          section_name: q.section_name,
+          content: `${q.question_number}. ${q.question_text}`,
+          raw_content: q.question_text
+        })),
+        template_name: result.template_name
+      };
+      
+      setGenerationResult(formattedResult);
       
       // Fetch complete template details to ensure we have all information
-      const templateResponse = await fetch(getApiUrl(`/api/templates/${selectedTemplate.id}`), {
-        method: 'GET',
-        headers: {}
-      });
-      
       let completeTemplate = selectedTemplate;
-      if (templateResponse.ok) {
-        completeTemplate = await templateResponse.json();
+      try {
+        const templateDetails = await templateService.getTemplate(selectedTemplate.id);
+        completeTemplate = templateDetails;
+      } catch (err) {
+        console.error('Error fetching template details:', err);
       }
+      
+      // Get the generated question paper details
+      const questionPaperDetails = await questionPaperService.getQuestionPaper(result.id);
       
       // Create formatted question paper with complete template details
       const formattedQuestionPaper = {
         id: result.id,
-        template_id: result.template_id,
-        name: questionData.name || `${completeTemplate.name} - Question Paper`,
-        template_name: completeTemplate.name || completeTemplate.template_name,
-        subject: completeTemplate.course_name || 'General',
-        grade: completeTemplate.course_code || 'N/A',
-        totalMarks: `${result.total_marks || calculateTemplateMarks(completeTemplate)} Max Marks`,
-        duration: `${completeTemplate.duration_minutes || completeTemplate.duration || '0'} Minutes`,
-        createdAt: new Date(result.generated_at).toLocaleDateString(),
+        template_id: selectedTemplate.id,
+        name: questionPaperDetails.name,
+        template_name: completeTemplate.templateName || completeTemplate.template_name || completeTemplate.name,
+        subject: 'General',
+        grade: 'N/A',
+        totalMarks: `${questionPaperDetails.totalMarks} Max Marks`,
+        duration: `${completeTemplate.duration || completeTemplate.duration_minutes || '0'} Minutes`,
+        createdAt: (() => {
+          const dateStr = questionPaperDetails.createdAt;
+          if (!dateStr) return new Date().toLocaleDateString();
+          const date = new Date(dateStr);
+          return isNaN(date.getTime()) ? new Date().toLocaleDateString() : date.toLocaleDateString();
+        })(),
         status: 'Generated',
-        questions: result.questions, // Already structured as individual objects
+        questions: questionPaperDetails.questions,
         has_questions: true,
         template: {
-          template_name: completeTemplate.name || completeTemplate.template_name,
-          institute_name: completeTemplate.institute_name,
-          course_name: completeTemplate.course_name,
-          course_code: completeTemplate.course_code,
-          duration_minutes: completeTemplate.duration_minutes || completeTemplate.duration?.replace(' Minutes', ''),
-          exam_date: completeTemplate.exam_date,
-          exam_time: formatExamTime(completeTemplate.exam_time || completeTemplate.examTime),
+          template_name: completeTemplate.templateName || completeTemplate.template_name || completeTemplate.name,
+          institute_name: completeTemplate.instituteName || completeTemplate.institute_name,
+          duration_minutes: completeTemplate.duration || completeTemplate.duration_minutes,
+          exam_date: completeTemplate.examDate || completeTemplate.exam_date,
+          exam_time: formatExamTime(completeTemplate.examTime || completeTemplate.exam_time),
           sections: completeTemplate.sections || []
         }
       };
@@ -275,15 +284,30 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
 
   // Helper function to calculate total marks from template
   const calculateTemplateMarks = (template: any) => {
-    if (!template?.sections) return 0;
+    // New structure: use totalMarks directly
+    if (template?.totalMarks) {
+      return template.totalMarks;
+    }
+    if (template?.total_marks) {
+      return template.total_marks;
+    }
     
-    return template.sections.reduce((total: number, section: any) => {
-      if (section.section_type === 'Answer All Questions') {
-        return total + (section.total_questions * section.marks_per_question);
-      } else {
-        return total + (section.questions_to_answer * section.marks_per_question);
-      }
-    }, 0);
+    // Legacy: calculate from sections (for backward compatibility)
+    if (template?.sections && template.sections.length > 0) {
+      return template.sections.reduce((total: number, section: any) => {
+        const sectionType = section.sectionType || section.section_type;
+        const totalQuestions = section.totalQuestions || section.total_questions || 0;
+        const questionsToAnswer = section.questionsToAnswer || section.questions_to_answer || totalQuestions;
+        const marksPerQuestion = section.marksPerQuestion || section.marks_per_question || 0;
+        const totalMarks = section.totalMarks || (sectionType === 'Answer All Questions' 
+          ? totalQuestions * marksPerQuestion
+          : questionsToAnswer * marksPerQuestion
+        );
+        return total + totalMarks;
+      }, 0);
+    }
+    
+    return 0;
   };
 
   // Helper function to format exam time
@@ -468,30 +492,39 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                         {/* Question Paper Header */}
                         <div className="text-center mb-8 border-b border-gray-300 pb-6">
                           <h3 className="text-xl font-bold text-gray-900 mb-3">
-                            {selectedTemplate.institute_name || 'Institute Name'}
+                            {selectedTemplate.instituteName || selectedTemplate.institute_name || 'Institute Name'}
                           </h3>
                           <p className="text-gray-700 mb-1">
-                            {selectedTemplate.template_name || 'Course Name'}
+                            {selectedTemplate.templateName || selectedTemplate.template_name || 'Template Name'}
                           </p>
-                          <p className="text-gray-700 mb-1">
-                            Internal Examination {selectedTemplate.exam_date ? new Date(selectedTemplate.exam_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'August, 2025'}
-                          </p>
-                          <p className="text-gray-700 mb-4">
-                            {selectedTemplate.course_code ? 
-                              `${selectedTemplate.course_name} (${selectedTemplate.course_code})` : 
-                              selectedTemplate.name}
-                          </p>
+                          {/* Removed "Internal Examination" line */}
+                          {/* <p className="text-gray-700 mb-1">
+                            Internal Examination {(selectedTemplate.examDate || selectedTemplate.exam_date) ? 
+                              new Date(selectedTemplate.examDate || selectedTemplate.exam_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 
+                              'August, 2025'}
+                          </p> */}
                           
                           <div className="flex justify-between items-center text-sm font-medium">
-                            <span>Max Mark: {selectedTemplate.maxMarks ? selectedTemplate.maxMarks.replace(' Max Marks', '') : '0'}</span>
-                            <span>Duration: {selectedTemplate.duration ? selectedTemplate.duration : '0 Minutes'}</span>
+                            <span>Max Mark: {(() => {
+                              if (selectedTemplate.maxMarks) {
+                                return selectedTemplate.maxMarks.replace(' Max Marks', '');
+                              }
+                              const totalMarks = calculateTemplateMarks(selectedTemplate);
+                              return totalMarks > 0 ? totalMarks.toString() : '0';
+                            })()}</span>
+                            <span>Duration: {selectedTemplate.duration || selectedTemplate.duration_minutes || selectedTemplate.duration?.replace(' Minutes', '') || '0'} Minutes</span>
                           </div>
                           
-                          {selectedTemplate.exam_date && selectedTemplate.exam_time && (
+                          {(selectedTemplate.examDate || selectedTemplate.exam_date) && (selectedTemplate.examTime || selectedTemplate.exam_time) && (
                             <div className="mt-2 text-sm text-gray-600">
-                              <span>Date: {new Date(selectedTemplate.exam_date).toLocaleDateString('en-GB')}</span>
+                              <span>Date: {(() => {
+                                const dateStr = selectedTemplate.examDate || selectedTemplate.exam_date;
+                                if (!dateStr) return 'N/A';
+                                const date = new Date(dateStr);
+                                return isNaN(date.getTime()) ? dateStr : date.toLocaleDateString('en-GB');
+                              })()}</span>
                               <span className="mx-2">•</span>
-                              <span>Time: {selectedTemplate.exam_time}</span>
+                              <span>Time: {formatExamTime(selectedTemplate.examTime || selectedTemplate.exam_time)}</span>
                             </div>
                           )}
                         </div>
@@ -503,67 +536,85 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                               <div key={index}>
                                 <div className="text-center mb-4">
                                   <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                                    {section.section_name || `Section ${index + 1}`}
+                                    {section.sectionName || section.section_name || `Section ${index + 1}`}
                                   </h4>
                                   <div className="text-sm text-gray-600 mb-2">
-                                    {section.section_type === 'Answer All Questions' ? (
-                                      <p>Answer all {section.total_questions} questions.</p>
-                                    ) : section.section_type === 'Choose Any' ? (
-                                      <p>Answer any {section.questions_to_answer} questions out of {section.total_questions}.</p>
-                                    ) : section.section_type === 'Optional' ? (
-                                      <p>This section is optional. Answer any {section.questions_to_answer} questions out of {section.total_questions}.</p>
-                                    ) : (
-                                      <p>Answer any {Math.min(section.total_questions || 5, 5)} Questions.</p>
-                                    )}
+                                    {(() => {
+                                      const sectionType = section.sectionType || section.section_type;
+                                      const totalQuestions = section.totalQuestions || section.total_questions || 0;
+                                      const questionsToAnswer = section.questionsToAnswer || section.questions_to_answer || totalQuestions;
+                                      
+                                      if (sectionType === 'Answer All Questions') {
+                                        return <p>Answer all {totalQuestions} questions.</p>;
+                                      } else if (sectionType === 'Choose Any') {
+                                        return <p>Answer any {questionsToAnswer} questions out of {totalQuestions}.</p>;
+                                      } else if (sectionType === 'Optional') {
+                                        return <p>This section is optional. Answer any {questionsToAnswer} questions out of {totalQuestions}.</p>;
+                                      } else {
+                                        return <p>Answer any {Math.min(totalQuestions || 5, 5)} Questions.</p>;
+                                      }
+                                    })()}
                                   </div>
                                   <p className="text-sm text-gray-600">
-                                    Each question carries {section.marks_per_question} mark{section.marks_per_question > 1 ? 's' : ''}.
+                                    Each question carries {section.marksPerQuestion || section.marks_per_question || 0} mark{(section.marksPerQuestion || section.marks_per_question || 0) > 1 ? 's' : ''}.
                                   </p>
                                 </div>
                                 
                                 {/* Sample Questions */}
-                                <div className="space-y-4">
-                                  {Array.from({ length: section.total_questions || 0 }, (_, qIndex) => (
+                                {/* <div className="space-y-4">
+                                  {Array.from({ length: section.totalQuestions || section.total_questions || 0 }, (_, qIndex) => (
                                     <div key={qIndex} className="flex">
                                       <span className="mr-4 font-medium text-gray-900 flex-shrink-0">{qIndex + 1})</span>
                                       <div className="flex-1 min-w-0">
-                                        {section.question_type === 'Multiple Choice' ? (
-                                          <div>
-                                            <p className="text-gray-900 mb-2 break-words">Sample multiple choice question for {section.question_type}?</p>
-                                            <div className="ml-4 space-y-1 text-sm text-gray-700">
-                                              <p>a) Option A</p>
-                                              <p>b) Option B</p>
-                                              <p>c) Option C</p>
-                                              <p>d) Option D</p>
-                                            </div>
-                                          </div>
-                                        ) : section.question_type === 'True/False' ? (
-                                          <p className="text-gray-900 break-words">Sample statement for true/false evaluation. (True/False)</p>
-                                        ) : section.question_type === 'One Word' ? (
-                                          <p className="text-gray-900 break-words">Fill in the blank: _____ is the capital of India.</p>
-                                        ) : section.question_type === 'Short Answer' ? (
-                                          <p className="text-gray-900 break-words">Explain the concept in 2-3 sentences.</p>
-                                        ) : section.question_type === 'Essay' ? (
-                                          <p className="text-gray-900 break-words">Write a detailed essay on the given topic (200-300 words).</p>
-                                        ) : section.question_type === 'Fill in the Blank' ? (
-                                          <p className="text-gray-900 break-words">Complete the sentence: The process of _____ is essential for _____.</p>
-                                        ) : (
-                                          <p className="text-gray-900 break-words">Sample {(section.question_type || 'general').toLowerCase()} question.</p>
-                                        )}
+                                        {(() => {
+                                          const questionType = section.questionType || section.question_type || 'Multiple Choice';
+                                          if (questionType === 'Multiple Choice') {
+                                            return (
+                                              <div>
+                                                <p className="text-gray-900 mb-2 break-words">Sample multiple choice question for {questionType}?</p>
+                                                <div className="ml-4 space-y-1 text-sm text-gray-700">
+                                                  <p>a) Option A</p>
+                                                  <p>b) Option B</p>
+                                                  <p>c) Option C</p>
+                                                  <p>d) Option D</p>
+                                                </div>
+                                              </div>
+                                            );
+                                          } else if (questionType === 'True/False') {
+                                            return <p className="text-gray-900 break-words">Sample statement for true/false evaluation. (True/False)</p>;
+                                          } else if (questionType === 'One Word') {
+                                            return <p className="text-gray-900 break-words">Fill in the blank: _____ is the capital of India.</p>;
+                                          } else if (questionType === 'Short Answer') {
+                                            return <p className="text-gray-900 break-words">Explain the concept in 2-3 sentences.</p>;
+                                          } else if (questionType === 'Essay') {
+                                            return <p className="text-gray-900 break-words">Write a detailed essay on the given topic (200-300 words).</p>;
+                                          } else if (questionType === 'Fill in the Blank') {
+                                            return <p className="text-gray-900 break-words">Complete the sentence: The process of _____ is essential for _____.</p>;
+                                          } else {
+                                            return <p className="text-gray-900 break-words">Sample {questionType.toLowerCase()} question.</p>;
+                                          }
+                                        })()}
                                       </div>
                                     </div>
                                   ))}
-                                </div>
+                                </div> */}
                                 
                                 {/* Section Summary */}
                                 <div className="mt-4 p-3 bg-gray-100 rounded-md text-sm text-gray-600">
                                   <div className="flex justify-between items-center">
                                     <span>Section Total:</span>
                                     <span className="font-medium">
-                                      {section.section_type === 'Answer All Questions' 
-                                        ? section.total_questions * section.marks_per_question
-                                        : section.questions_to_answer * section.marks_per_question
-                                      } marks
+                                      {(() => {
+                                        const sectionType = section.sectionType || section.section_type;
+                                        const totalQuestions = section.totalQuestions || section.total_questions || 0;
+                                        const questionsToAnswer = section.questionsToAnswer || section.questions_to_answer || totalQuestions;
+                                        const marksPerQuestion = section.marksPerQuestion || section.marks_per_question || 0;
+                                        const totalMarks = section.totalMarks || (sectionType === 'Answer All Questions' 
+                                          ? totalQuestions * marksPerQuestion
+                                          : questionsToAnswer * marksPerQuestion
+                                        );
+                                        return `${totalMarks} marks`;
+                                      })()}
                                     </span>
                                   </div>
                                 </div>
@@ -579,7 +630,16 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                         {/* Paper Footer */}
                         <div className="mt-8 pt-6 border-t border-gray-300 text-center text-sm text-gray-500">
                           <p>--- End of Question Paper ---</p>
-                          <p className="mt-2">Total Duration: {selectedTemplate.duration || '0 Minutes'} | Total Marks: {selectedTemplate.maxMarks || '0 Max Marks'}</p>
+                          <p className="mt-2">
+                            Total Duration: {selectedTemplate.duration || selectedTemplate.duration_minutes || selectedTemplate.duration?.replace(' Minutes', '') || '0'} Minutes | 
+                            Total Marks: {(() => {
+                              if (selectedTemplate.maxMarks) {
+                                return selectedTemplate.maxMarks.replace(' Max Marks', '');
+                              }
+                              const totalMarks = calculateTemplateMarks(selectedTemplate);
+                              return totalMarks > 0 ? totalMarks.toString() : '0';
+                            })()}
+                          </p>
                         </div>
                       </div>
                     ) : (
@@ -617,7 +677,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                 </div>
 
                 {/* BTL Levels Section */}
-                <div className="mb-8">
+                {/* <div className="mb-8">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-medium text-gray-900">Bloom's Taxonomy Levels (BTL)</h3>
                   </div>
@@ -625,7 +685,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                     Select the cognitive levels you want to include in your question paper.
                   </p>
                   
-                  {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[
                       key: 'remember', label: 'Remember (BTL-1)', desc: 'Recall facts, terms, concepts' },
                       { key: 'understand', label: 'Understand (BTL-2)', desc: 'Explain ideas or concepts' },
@@ -647,7 +707,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                         <p className="text-xs text-gray-500">{btl.desc}</p>
                       </div>
                     ))}
-                  </div> */}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[
                       { key: 'remember', label: 'Remember (BTL-1)', desc: 'Recall facts, terms, concepts' },
@@ -672,7 +732,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                     ))}
                   </div>
 
-                  {/* BTL Summary */}
+                  
                   <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                     <p className="text-sm text-blue-800">
                       <strong>Selected Levels:</strong> {
@@ -683,7 +743,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                       }
                     </p>
                   </div>
-                </div>
+                </div> */}
 
                 {/* Syllabus Content */}
                 <div className="mb-8">
@@ -758,8 +818,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                   </button>
                   <button
                     onClick={handleNextStep}
-                    disabled={loading || !questionData.syllabus || 
-                      !Object.values(questionData.btlLevels).some(level => level.enabled)}
+                    disabled={loading || !questionData.syllabus.trim()}
                     className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
                     {loading ? (
@@ -795,14 +854,6 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                     <div className="grid grid-cols-1 gap-4 text-sm">
                       <div>
                         <span className="text-gray-600">Name:</span> {questionData.name}
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Selected BTL Levels:</span> {
-                          Object.entries(questionData.btlLevels)
-                            .filter(([_, level]) => level.enabled)
-                            .map(([key, _]) => key.charAt(0).toUpperCase() + key.slice(1))
-                            .join(', ') || 'None selected'
-                        }
                       </div>
                       <div>
                         <span className="text-gray-600">Syllabus:</span> {
@@ -886,7 +937,7 @@ const QuestionPaper: React.FC<QuestionPaperProps> = ({ onBack, onQuestionGenerat
                   </button>
                   <button
                     onClick={handleGenerateQuestions}
-                    disabled={isGeneratingQuestions || !createdQuestionPaperId}
+                    disabled={isGeneratingQuestions || !selectedTemplate || !questionData.syllabus.trim()}
                     className="px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md hover:from-blue-600 hover:to-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
                     {isGeneratingQuestions ? (
